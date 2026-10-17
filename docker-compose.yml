@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: samiti-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: samiti
+      POSTGRES_PASSWORD: samiti_local_pw
+      POSTGRES_DB: samiti
+    ports:
+      - "5433:5432"
+    volumes:
+      - samiti-db-data:/var/lib/postgresql/data
+      # creates samiti_test (practice data) and samiti_ci (automated tests) on first start
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  samiti-db-data:

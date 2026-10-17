@@ -1,0 +1,22 @@
+# dependencies and build output
+node_modules/
+frontend/.next/
+frontend/.next-check/
+frontend/out/
+.vercel/
+
+# secrets — never commit (copy backend/.env.example instead)
+.env
+.env.*
+!.env.example
+
+# real member data: database backups, dumps, uploaded files
+backend/backups/
+backend/uploads/
+*.dump
+*.sql.gz
+
+# misc
+*.log
+.DS_Store
+Thumbs.db

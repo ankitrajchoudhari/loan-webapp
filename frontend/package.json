@@ -1,0 +1,26 @@
+{
+  "name": "samiti-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "check:i18n": "node scripts/check-i18n.mjs"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0",
+    "html2canvas-pro": "^1.5.8",
+    "i18next": "^26.4.4",
+    "jspdf": "^3.0.1",
+    "next": "^15.5.27",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3"
+  }
+}

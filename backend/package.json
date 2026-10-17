@@ -1,0 +1,38 @@
+{
+  "name": "samiti-backend",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shree Shyam Seva Samiti — accounts API (/api/v1)",
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/server.js",
+    "start": "node src/server.js",
+    "db:new-migration": "prisma migrate dev --create-only",
+    "db:deploy": "node --env-file=.env scripts/migrate-all.js",
+    "seed:admin": "node --env-file=.env scripts/seed-admin.js",
+    "practice:reset": "node --env-file=.env scripts/practice-reset.js",
+    "backup": "node --env-file=.env scripts/backup.js",
+    "restore": "node --env-file=.env scripts/restore.js",
+    "test": "node --env-file=.env scripts/test.js",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "vercel-build": "prisma generate && node scripts/migrate-all.js",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.0",
+    "bcryptjs": "^2.4.3",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.16.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

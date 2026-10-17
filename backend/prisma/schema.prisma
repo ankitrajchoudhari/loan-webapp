@@ -1,0 +1,425 @@
+// Shree Shyam Seva Samiti — database schema (PostgreSQL)
+//
+// Money is stored as whole paise in integer columns (₹1,000 = 100000) so every sum is exact.
+// Interest rates are stored in hundredths of a percent (2% = 200, 1.5% = 150).
+// Corrections never delete rows: entries are "voided" with a reason, and every change is in audit_log.
+// The same schema is deployed to the live database and to the separate practice (test) database.
+
+generator client {
+  provider      = "prisma-client-js"
+  // native = this computer; rhel-openssl-3.0.x = Vercel's servers
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MemberStatus {
+  active
+  inactive
+}
+
+enum PayMethod {
+  cash
+  upi
+  bank
+  other
+}
+
+enum EntrySource {
+  entry // typed in by the admin on the regular screens
+  history // posted from a verified historical batch
+}
+
+enum InterestMethod {
+  reducing // rate % on the principal still outstanding at the start of each month
+  flat // rate % on the original principal, every month while any principal is outstanding
+  fixed // a fixed rupee amount every month while any principal is outstanding
+}
+
+enum RatePeriod {
+  month
+  year
+}
+
+model Member {
+  id                       String       @id @default(uuid()) @db.Uuid
+  memberNo                 Int          @unique @map("member_no")
+  fullName                 String       @map("full_name") @db.VarChar(100)
+  mobileNumber             String       @unique @map("mobile_number") @db.VarChar(10)
+  joinDate                 DateTime     @map("join_date") @db.Date
+  monthlyInstallmentPaise  Int          @map("monthly_installment_paise")
+  status                   MemberStatus @default(active)
+  inactiveSince            DateTime?    @map("inactive_since") @db.Date
+  note                     String?
+  /// date of birth — the member logs in with mobile number + this date
+  dateOfBirth              DateTime?    @map("date_of_birth") @db.Date
+  /// advance paid beyond dues; used first on the next payment
+  creditPaise              Int          @default(0) @map("credit_paise")
+  failedLogins             Int          @default(0) @map("failed_logins")
+  lockedUntil              DateTime?    @map("locked_until")
+  createdAt                DateTime     @default(now()) @map("created_at")
+  updatedAt                DateTime     @updatedAt @map("updated_at")
+
+  installments     Installment[]
+  loans            Loan[]
+  payments         Payment[]
+  loanApplications LoanApplication[]
+
+  @@index([fullName])
+  @@map("members")
+}
+
+/// One samiti installment per member per month (enforced by a partial unique index on live rows).
+model Installment {
+  id          String      @id @default(uuid()) @db.Uuid
+  memberId    String      @map("member_id") @db.Uuid
+  month       Int
+  year        Int
+  /// installment amount that applied for this month (snapshot, so later changes don't rewrite history)
+  duePaise    Int         @map("due_paise")
+  amountPaise Int         @map("amount_paise")
+  paidOn      DateTime    @map("paid_on") @db.Date
+  method      PayMethod?
+  note        String?
+  source      EntrySource @default(entry)
+  batchId     String?     @map("batch_id") @db.Uuid
+  voidedAt    DateTime?   @map("voided_at")
+  voidReason  String?     @map("void_reason")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  member Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  batch  HistoryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([year, month])
+  @@index([memberId])
+  @@map("installments")
+}
+
+model Loan {
+  id                  String         @id @default(uuid()) @db.Uuid
+  loanNo              Int            @unique @map("loan_no")
+  memberId            String         @map("member_id") @db.Uuid
+  takenOn             DateTime       @map("taken_on") @db.Date
+  principalPaise      Int            @map("principal_paise")
+  interestMethod      InterestMethod @map("interest_method")
+  /// hundredths of a percent; unused for the fixed method
+  rateBp              Int            @default(0) @map("rate_bp")
+  ratePeriod          RatePeriod     @default(month) @map("rate_period")
+  /// monthly interest amount for the fixed method
+  fixedInterestPaise  Int            @default(0) @map("fixed_interest_paise")
+  /// first month interest is charged (default: month after the loan is taken)
+  interestFromMonth   Int            @map("interest_from_month")
+  interestFromYear    Int            @map("interest_from_year")
+  /// agreed monthly repayment (कर्ज की किस्त) — used for reminders and pre-filling, not for interest
+  installmentPaise    Int            @default(0) @map("installment_paise")
+  /// unpaid interest carried over from old (pre-system) records
+  openingInterestPaise Int           @default(0) @map("opening_interest_paise")
+  note                String?
+  source              EntrySource    @default(entry)
+  batchId             String?        @map("batch_id") @db.Uuid
+  voidedAt            DateTime?      @map("voided_at")
+  voidReason          String?        @map("void_reason")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  member     Member          @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  repayments LoanRepayment[]
+  batch      HistoryBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([memberId])
+  @@map("loans")
+}
+
+model LoanRepayment {
+  id             String      @id @default(uuid()) @db.Uuid
+  loanId         String      @map("loan_id") @db.Uuid
+  paidOn         DateTime    @map("paid_on") @db.Date
+  totalPaise     Int         @map("total_paise")
+  principalPaise Int         @map("principal_paise")
+  interestPaise  Int         @map("interest_paise")
+  method         PayMethod?
+  note           String?
+  source         EntrySource @default(entry)
+  batchId        String?     @map("batch_id") @db.Uuid
+  voidedAt       DateTime?   @map("voided_at")
+  voidReason     String?     @map("void_reason")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  loan  Loan          @relation(fields: [loanId], references: [id], onDelete: Restrict)
+  batch HistoryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([loanId, paidOn])
+  @@map("loan_repayments")
+}
+
+enum BatchRowKind {
+  installment
+  loan
+  repayment
+}
+
+enum BatchRowStatus {
+  needs_check // entered or imported, not yet checked by the admin
+  verified // admin confirmed it matches the old register
+  posted // saved into the real records
+}
+
+/// A group of old (historical) records entered or imported together, checked, then posted.
+model HistoryBatch {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String    @db.VarChar(120)
+  note      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  rows         HistoryRow[]
+  installments Installment[]
+  loans        Loan[]
+  repayments   LoanRepayment[]
+
+  @@map("history_batches")
+}
+
+model HistoryRow {
+  id         String         @id @default(uuid()) @db.Uuid
+  batchId    String         @map("batch_id") @db.Uuid
+  lineNo     Int            @map("line_no")
+  kind       BatchRowKind
+  /// the row's fields as entered (member no, dates, amounts …)
+  data       Json
+  status     BatchRowStatus @default(needs_check)
+  /// id of the installment / loan / repayment created when posted
+  postedId   String?        @map("posted_id") @db.Uuid
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  batch HistoryBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, lineNo])
+  @@map("history_rows")
+}
+
+/// Admin accounts always live in the live database (practice mode signs in against them too).
+/// Staff: developer (everything), admin, sub-admin (only the work given to them).
+/// Admin/developer log in with mobile + (date of birth or Gmail) + secret code; sub-admin with mobile + date of birth.
+model AdminUser {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String    @db.VarChar(100)
+  mobileNumber   String?   @unique @map("mobile_number") @db.VarChar(10)
+  email          String?   @unique @db.VarChar(200)
+  firebaseUid    String?   @unique @map("firebase_uid") @db.VarChar(128)
+  dateOfBirth    DateTime? @map("date_of_birth") @db.Date
+  pinHash        String?   @map("pin_hash") @db.VarChar(100)
+  /// developer | admin | subadmin
+  role           String    @default("admin") @db.VarChar(10)
+  /// sub-admin work areas: members, installments, loans, history, reports
+  permissions    Json      @default("[]")
+  /// work the admin has given this person, in words
+  duty           String?
+  status         String    @default("active") @db.VarChar(10)
+  createdById    String?   @map("created_by_id") @db.Uuid
+  failedLogins   Int       @default(0) @map("failed_logins")
+  lockedUntil    DateTime? @map("locked_until")
+  lastLogin      DateTime? @map("last_login")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model OtpToken {
+  id           String   @id @default(uuid()) @db.Uuid
+  mobileNumber String   @map("mobile_number") @db.VarChar(10)
+  codeHash     String   @map("code_hash") @db.VarChar(100)
+  expiresAt    DateTime @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([mobileNumber, createdAt])
+  @@map("otp_tokens")
+}
+
+/// Every important change: who, what, before/after and the reason given.
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  at        DateTime @default(now())
+  actorRole String   @map("actor_role") @db.VarChar(10)
+  actorId   String?  @map("actor_id") @db.Uuid
+  actorName String?  @map("actor_name") @db.VarChar(100)
+  action    String   @db.VarChar(60)
+  entity    String?  @db.VarChar(30)
+  entityId  String?  @map("entity_id") @db.Uuid
+  memberId  String?  @map("member_id") @db.Uuid
+  reason    String?
+  before    Json?
+  after     Json?
+
+  @@index([at])
+  @@index([entity, entityId])
+  @@index([memberId])
+  @@map("audit_log")
+}
+
+model RevokedToken {
+  jti       String   @id @db.VarChar(64)
+  expiresAt DateTime @map("expires_at")
+
+  @@map("revoked_tokens")
+}
+
+model Setting {
+  key       String   @id @db.VarChar(50)
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+/// Help requests from admins / sub-admins to the developer (live database only).
+model SupportTicket {
+  id          String    @id @default(uuid()) @db.Uuid
+  ticketNo    Int       @unique @map("ticket_no")
+  createdById String    @map("created_by_id") @db.Uuid
+  subject     String    @db.VarChar(200)
+  details     String
+  page        String?   @db.VarChar(200)
+  errorCode   String?   @map("error_code") @db.VarChar(60)
+  status      String    @default("open") @db.VarChar(10)
+  /// conversation: [{ by: "staff" | "support", staffId, text, at }]
+  messages    Json      @default("[]")
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
+/// In-app notifications for staff (bell icon).
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  recipientId String    @map("recipient_id") @db.Uuid
+  title       String    @db.VarChar(200)
+  body        String?
+  link        String?   @db.VarChar(200)
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([recipientId, readAt, createdAt])
+  @@map("notifications")
+}
+
+/// A member's payment request: UPI (member pays, gives the UTR, staff confirm) or cash (staff confirm on collection).
+/// On confirmation the amount is applied to dues (oldest installments first, then loan dues);
+/// anything extra becomes the member's advance credit.
+model Payment {
+  id            String    @id @default(uuid()) @db.Uuid
+  paymentNo     Int       @unique @map("payment_no")
+  memberId      String    @map("member_id") @db.Uuid
+  method        String    @db.VarChar(10) // upi | cash | online
+  /// money for the samiti (dues)
+  amountPaise   Int       @map("amount_paise")
+  /// platform fee charged on this transaction (not the samiti's money)
+  feePaise      Int       @map("fee_paise")
+  totalPaise    Int       @map("total_paise")
+  /// initiated → submitted → confirmed | rejected | cancelled
+  status        String    @default("initiated") @db.VarChar(12)
+  utr           String?   @db.VarChar(40)
+  /// online gateway (razorpay): order + payment ids; confirmed automatically after signature check
+  gateway          String?   @db.VarChar(20)
+  gatewayOrderId   String?   @unique @map("gateway_order_id") @db.VarChar(60)
+  gatewayPaymentId String?   @unique @map("gateway_payment_id") @db.VarChar(60)
+  upiId         String?   @map("upi_id") @db.VarChar(100)
+  /// dues at the time the member opened the payment
+  dueSnapshot   Json?     @map("due_snapshot")
+  /// how the money was applied: [{ kind, month, year, loanNo, amountPaise, ... }], plus credit before/after
+  allocation    Json?
+  createdById   String?   @map("created_by_id") @db.Uuid
+  confirmedById String?   @map("confirmed_by_id") @db.Uuid
+  confirmedAt   DateTime? @map("confirmed_at")
+  rejectReason  String?   @map("reject_reason")
+  submittedAt   DateTime? @map("submitted_at")
+  receiptPrintedAt DateTime? @map("receipt_printed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([memberId, createdAt])
+  @@map("payments")
+}
+
+/// A deleted member's mobile number (SHA-256 only — the number itself is erased).
+/// The same number can be used for a new member once `availableAt` has passed (7 days).
+model DeletedMobile {
+  mobileHash  String   @id @map("mobile_hash") @db.VarChar(64)
+  deletedAt   DateTime @default(now()) @map("deleted_at")
+  availableAt DateTime @map("available_at")
+
+  @@map("deleted_mobiles")
+}
+
+/// A member's loan request. Interest terms are copied from the admin's default settings when applying.
+/// documents: { aadhaarFront | aadhaarBack | pan: { file, type, status: pending|verified|rejected, note, checkedAt } }
+/// On approval the loan is created (loanId) with the EMI as its agreed monthly installment.
+model LoanApplication {
+  id                 String         @id @default(uuid()) @db.Uuid
+  applicationNo      Int            @unique @map("application_no")
+  memberId           String         @map("member_id") @db.Uuid
+  amountPaise        Int            @map("amount_paise")
+  months             Int
+  interestMethod     InterestMethod @map("interest_method")
+  rateBp             Int            @default(0) @map("rate_bp")
+  ratePeriod         RatePeriod     @default(month) @map("rate_period")
+  fixedInterestPaise Int            @default(0) @map("fixed_interest_paise")
+  emiPaise           Int            @map("emi_paise")
+  totalInterestPaise Int            @map("total_interest_paise")
+  purpose            String?        @db.VarChar(300)
+  aadhaarNumber      String         @map("aadhaar_number") @db.VarChar(12)
+  panNumber          String         @map("pan_number") @db.VarChar(10)
+  bankName           String         @map("bank_name") @db.VarChar(120)
+  bankBranch         String?        @map("bank_branch") @db.VarChar(200)
+  accountHolder      String         @map("account_holder") @db.VarChar(100)
+  accountNumber      String         @map("account_number") @db.VarChar(20)
+  ifsc               String         @db.VarChar(11)
+  /// IFSC was found in the national IFSC directory when applying
+  ifscVerified       Boolean        @default(false) @map("ifsc_verified")
+  documents          Json           @default("{}")
+  /// pending → approved | rejected | cancelled (by the member)
+  status             String         @default("pending") @db.VarChar(12)
+  loanId             String?        @map("loan_id") @db.Uuid
+  reviewedById       String?        @map("reviewed_by_id") @db.Uuid
+  reviewedAt         DateTime?      @map("reviewed_at")
+  rejectReason       String?        @map("reject_reason")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  files  LoanDocument[]
+
+  @@index([status, createdAt])
+  @@index([memberId])
+  @@map("loan_applications")
+}
+
+/// Photo of one document (Aadhaar front/back, PAN) for a loan application, stored in the database.
+model LoanDocument {
+  id            String          @id @default(uuid()) @db.Uuid
+  applicationId String          @map("application_id") @db.Uuid
+  kind          String          @db.VarChar(20)
+  contentType   String          @map("content_type") @db.VarChar(30)
+  data          Bytes
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  application LoanApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, kind])
+  @@map("loan_documents")
+}
