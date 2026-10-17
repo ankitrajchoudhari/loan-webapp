@@ -45,7 +45,7 @@ export function Emblem({ className = 'size-11' }) {
 }
 
 /** Live date + time (India time), top corner on every screen. Drawn only in the browser, so no server/browser mismatch. */
-function LiveClock() {
+export function LiveClock() {
   const { i18n } = useTranslation();
   const [now, setNow] = useState(null);
   useEffect(() => {
@@ -127,6 +127,39 @@ export function PublicShell({ children, practice }) {
   );
 }
 
+/** Bottom tab bar for phones: big tap targets, the current page highlighted. */
+function BottomTabs({ items, className = '' }) {
+  const pathname = usePathname();
+  const { t } = useTranslation();
+  return (
+    <nav className={`no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(60,30,0,.08)] backdrop-blur ${className}`} aria-label={t('nav.menu')}>
+      <div className="mx-auto flex max-w-lg">
+        {items.map(({ href, icon, label, onClick, exact }) => {
+          const active = href && (exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
+          const cls = `flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[0.7rem] font-semibold leading-tight transition ${active ? 'text-maroon' : 'text-muted hover:text-maroon'}`;
+          const inner = (
+            <>
+              <span className={`grid h-8 w-12 place-items-center rounded-full transition ${active ? 'bg-maroon text-white' : ''}`}><Icon name={icon} className="size-5" /></span>
+              <span className="max-w-full truncate">{t(label)}</span>
+            </>
+          );
+          return href
+            ? <Link key={label} href={href} className={cls} aria-current={active ? 'page' : undefined}>{inner}</Link>
+            : <button key={label} type="button" onClick={onClick} className={cls}>{inner}</button>;
+        })}
+      </div>
+    </nav>
+  );
+}
+
+const MEMBER_TABS = [
+  { href: '/member', icon: 'home', label: 'nav.home', exact: true },
+  { href: '/member/pay', icon: 'wallet', label: 'nav.pay' },
+  { href: '/member/loan', icon: 'handCoins', label: 'nav.loan' },
+  { href: '/member/month', icon: 'file', label: 'nav.statement' },
+  { href: '/member/history', icon: 'history', label: 'nav.records' },
+];
+
 export function MemberShell({ children }) {
   const who = useSession('member');
   const router = useRouter();
@@ -140,10 +173,11 @@ export function MemberShell({ children }) {
         </button>
       </BrandBar>
       {who?.env === 'test' && <PracticeBanner />}
-      <main className="mx-auto max-w-lg px-4 pb-6 pt-3">
+      <main className="mx-auto max-w-lg px-4 pb-28 pt-3">
         <PrintHeader />
         {who ? children : <Loading />}
       </main>
+      <BottomTabs items={MEMBER_TABS} />
     </div>
   );
 }
@@ -162,8 +196,19 @@ const ADMIN_NAV = [
   ['/admin/team', 'shield', 'nav.team', 'manager'],
   ['/admin/changes', 'log', 'settings.changeLog', null],
   ['/admin/platform', 'receipt', 'nav.platform', 'manager'],
+  ['/admin/login-help', 'phone', 'nav.loginHelp', 'manager'],
   ['/admin/support', 'message', 'nav.support', null],
   ['/admin/settings', 'settings', 'nav.settings', 'manager'],
+];
+
+// the pages staff use most, for the phone tab bar (first four they may use, then "Menu")
+const ADMIN_TABS = [
+  ['/admin', 'home', 'nav.home', null],
+  ['/admin/members', 'users', 'nav.members', 'members'],
+  ['/admin/installments', 'calendarCheck', 'nav.installments', 'installments'],
+  ['/admin/payments', 'wallet', 'nav.payments', 'payments'],
+  ['/admin/loans', 'handCoins', 'nav.loans', 'loans'],
+  ['/admin/reports', 'chart', 'nav.reports', 'reports'],
 ];
 
 /** Can this staff user use a page/area? Mirrors the server's rules (the server decides). */
@@ -235,11 +280,16 @@ export function AdminShell({ children }) {
           </div>
           <NavLinks user={who?.user} />
         </aside>
-        <main className="min-w-0 flex-1 pb-16 pt-6">
+        <main className="min-w-0 flex-1 pb-28 pt-4 sm:pt-6 lg:pb-16">
           <PrintHeader />
           {who ? children : <Loading />}
         </main>
       </div>
+
+      <BottomTabs className="lg:hidden" items={[
+        ...ADMIN_TABS.filter(([, , , need]) => allowed(who?.user, need)).slice(0, 4).map(([href, icon, label]) => ({ href, icon, label, exact: href === '/admin' })),
+        { icon: 'menu', label: 'nav.menu', onClick: () => setOpen(true) },
+      ]} />
 
       {open && (
         <div className="no-print fixed inset-0 z-40 bg-black/45 lg:hidden" onClick={() => setOpen(false)}>

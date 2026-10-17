@@ -98,7 +98,7 @@ export default function LoanApplicationDetail({ params }) {
       <Card title={t('apply.emiList')} icon="calendar"><EmiTable plan={data.plan} initial={6} /></Card>
 
       {a.status === 'pending' && (
-        <div className="sticky bottom-2 z-10 grid gap-2 rounded-2xl bg-cream/90 p-1 backdrop-blur sm:grid-cols-2">
+        <div className="sticky bottom-[5.5rem] z-10 grid gap-2 rounded-2xl bg-cream/90 p-1 backdrop-blur lg:bottom-2 sm:grid-cols-2">
           <Button variant="success" icon="check" disabled={!allVerified} onClick={() => setDialog('approve')}>{allVerified ? t('apply.approve') : t('apply.verifyFirst')}</Button>
           <Button variant="secondary" icon="x" onClick={() => setDialog('reject')}>{t('apply.reject')}</Button>
         </div>

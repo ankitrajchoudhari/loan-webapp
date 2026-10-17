@@ -469,3 +469,32 @@ model PlatformBill {
   @@unique([year, month])
   @@map("platform_bills")
 }
+
+/// "I can't log in" requests from the login page (no login needed), sent to the admin or the developer.
+/// open → seen (staff working on it) → fixed. Kept in the live database. The person follows it with a secret token.
+model HelpRequest {
+  id        String    @id @default(uuid()) @db.Uuid
+  requestNo Int       @unique @map("request_no")
+  mobile    String    @db.VarChar(10)
+  name      String?   @db.VarChar(100)
+  /// the member with this number (if any), in the environment they tried to log in to
+  memberId  String?   @map("member_id") @db.Uuid
+  env       String    @default("live") @db.VarChar(5)
+  /// not_registered | wrong_dob | locked | forgot_code | other
+  problem   String    @db.VarChar(30)
+  message   String?   @db.VarChar(1000)
+  /// admin | developer
+  sendTo    String    @map("send_to") @db.VarChar(10)
+  status    String    @default("open") @db.VarChar(10)
+  tokenHash String    @map("token_hash") @db.VarChar(64)
+  seenAt    DateTime? @map("seen_at")
+  seenById  String?   @map("seen_by_id") @db.Uuid
+  fixedAt   DateTime? @map("fixed_at")
+  fixedById String?   @map("fixed_by_id") @db.Uuid
+  /// note shown to the person, e.g. "date of birth corrected — try again"
+  reply     String?   @db.VarChar(500)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("help_requests")
+}

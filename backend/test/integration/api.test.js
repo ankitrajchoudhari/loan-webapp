@@ -39,7 +39,7 @@ function agent() {
   };
 }
 
-const TABLES = ['payments', 'history_rows', 'history_batches', 'loan_repayments', 'loans', 'installments', 'members', 'otp_tokens', 'audit_log', 'settings', 'admin_users', 'revoked_tokens', 'support_tickets', 'notifications', 'deleted_mobiles', 'loan_applications', 'platform_fee_periods', 'platform_bills'];
+const TABLES = ['payments', 'history_rows', 'history_batches', 'loan_repayments', 'loans', 'installments', 'members', 'otp_tokens', 'audit_log', 'settings', 'admin_users', 'revoked_tokens', 'support_tickets', 'notifications', 'deleted_mobiles', 'loan_applications', 'platform_fee_periods', 'platform_bills', 'help_requests'];
 
 before(async () => {
   for (const env of ['live', 'test']) await client(env).$executeRawUnsafe(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(',')} CASCADE`);
@@ -625,4 +625,41 @@ test('new loan only after 80% of the running loan is repaid; cancelling a loan a
   const mine = await applicant('GET', '/loan-apply/mine', undefined, { expect: 200 });
   assert.equal(mine.data.applications[0].status, 'cancelled', 'application of a cancelled loan shows as cancelled');
   await m('POST', '/loan-apply', form, { expect: 201 });
+});
+
+test('login help: anyone can ask the admin or developer; they get a notice, mark it seen and fixed; the person follows it with a token', async () => {
+  const visitor = agent();
+  const bad = await visitor('POST', '/help', { mobile: '123', problem: 'wrong_dob', sendTo: 'admin' }, { expect: 400 });
+  assert.equal(bad.data.error.details[0].message, 'mobile_invalid');
+  const sent = await visitor('POST', '/help', { mobile: '9811111111', problem: 'wrong_dob', message: 'जन्म तिथि गलत बता रहा है', sendTo: 'admin' }, { expect: 201 });
+  const { id } = sent.data.request;
+  const { token } = sent.data;
+  assert.equal(sent.data.request.status, 'open');
+  await visitor('GET', `/help/${id}?token=wrong`, undefined, { expect: 404 });
+  assert.equal((await visitor('GET', `/help/${id}?token=${token}`, undefined, { expect: 200 })).data.request.status, 'open');
+
+  const list = await admin('GET', '/help-requests?active=1', undefined, { expect: 200 });
+  const row = list.data.requests.find((r) => r.id === id);
+  assert.equal(row.name, 'रामलाल शर्मा', 'member is recognised from the number');
+  assert.equal(list.data.active, 1);
+  const notes = await admin('GET', '/notifications', undefined, { expect: 200 });
+  assert.ok(JSON.stringify(notes.data).includes(`#${sent.data.request.requestNo}`));
+
+  // sent to the developer: the admin does not see it, the developer does
+  const dev = agent();
+  await dev('POST', '/auth/login', DEV, { expect: 200 });
+  const toDev = await visitor('POST', '/help', { mobile: '9822222222', problem: 'locked', sendTo: 'developer' }, { expect: 201 });
+  assert.ok(!(await admin('GET', '/help-requests', undefined, { expect: 200 })).data.requests.some((r) => r.id === toDev.data.request.id));
+  assert.ok((await dev('GET', '/help-requests', undefined, { expect: 200 })).data.requests.some((r) => r.id === toDev.data.request.id));
+  await admin('POST', `/help-requests/${toDev.data.request.id}/fixed`, {}, { expect: 404 });
+
+  await admin('POST', `/help-requests/${id}/seen`, {}, { expect: 200 });
+  assert.equal((await visitor('GET', `/help/${id}?token=${token}`, undefined, { expect: 200 })).data.request.status, 'seen');
+  await admin('POST', `/help-requests/${id}/fixed`, { reply: 'जन्म तिथि ठीक कर दी, फिर से लॉगिन करें' }, { expect: 200 });
+  const done = await visitor('GET', `/help/${id}?token=${token}`, undefined, { expect: 200 });
+  assert.equal(done.data.request.status, 'fixed');
+  assert.equal(done.data.request.reply, 'जन्म तिथि ठीक कर दी, फिर से लॉगिन करें');
+  const m = agent();
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('GET', '/help-requests', undefined, { expect: 403 }); // members can't see the list
 });

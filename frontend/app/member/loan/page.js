@@ -243,7 +243,7 @@ function Wizard({ onDone }) {
 
       {problem && <ErrorBox error={typeof problem === 'string' ? t(`apply.err.${problem}`, { defaultValue: errorText(t, problem) }) : problem} />}
 
-      <div className="sticky bottom-2 z-10 grid grid-cols-[auto_1fr] gap-2 rounded-2xl bg-cream/90 p-1 backdrop-blur">
+      <div className="sticky bottom-[5.5rem] z-10 grid grid-cols-[auto_1fr] gap-2 rounded-2xl bg-cream/90 p-1 backdrop-blur">
         <Button variant="secondary" icon="chevronLeft" disabled={step === 0 || busy} onClick={() => { setStep((s) => s - 1); setProblem(null); }}>{t('common.back')}</Button>
         <Button variant={name === 'review' ? 'success' : 'primary'} icon={name === 'review' ? 'send' : 'chevronRight'} loading={busy} onClick={next}>
           {name === 'review' ? t('apply.submit') : t('apply.next')}

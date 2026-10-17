@@ -15,6 +15,7 @@ import { support, notifications } from './routes/support.js';
 import { memberPay, payments, upiSettings, receipts } from './routes/pay.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import platform from './routes/platform.js';
+import { helpPublic, helpStaff } from './routes/help.js';
 import loanApply from './routes/loanApply.js';
 
 export function createApp() {
@@ -47,6 +48,7 @@ export function createApp() {
     message: { error: { code: 'too_many_requests' } },
   }), authRoutes);
 
+  api.use('/help', helpPublic); // "I can't log in" — no login needed
   api.use(requireLogin);
   api.use('/statements', statementRoutes); // members (own account only) and admins
   api.use('/pay', memberPay); // members: their own dues and payments
@@ -71,6 +73,7 @@ export function createApp() {
   api.use('/audit-log', auditLog); // read-only; every staff member (developer actions show as "support team" to others)
   api.use('/backup', requireManager, backup);
   api.use('/practice', requireManager, practice);
+  api.use('/help-requests', requireManager, helpStaff); // login problems: admin + developer
   api.use('/platform', requireManager, platform); // platform fee bills: developer ↔ admin
 
   app.use('/api/v1', api);

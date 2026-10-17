@@ -29,7 +29,7 @@ export default function Providers({ children }) {
       <ToastContext.Provider value={show}>
         {children}
         {toast && (
-          <div className="no-print fixed inset-x-0 bottom-5 z-[60] flex justify-center px-4" role="status" aria-live="polite">
+          <div className="no-print fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4 lg:bottom-5" role="status" aria-live="polite">
             <div
               key={toast.id}
               className={`flex max-w-md items-center gap-3 rounded-2xl px-5 py-4 text-base font-semibold text-white shadow-xl ${

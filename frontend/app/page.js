@@ -2,7 +2,8 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LangToggle, Emblem, PracticeBanner } from '@/components/shell';
+import Link from 'next/link';
+import { LangToggle, LiveClock, Emblem, PracticeBanner } from '@/components/shell';
 import { Badge, Button, ErrorBox, Input, Notice, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import DateField from '@/components/DateField';
@@ -106,7 +107,7 @@ export default function Login() {
     <div className="flex min-h-dvh flex-col">
       <header className="flex items-center justify-between gap-3 border-b-4 border-brand bg-white px-4 py-2">
         <div className="flex items-center gap-2"><Emblem className="size-9" /></div>
-        <LangToggle />
+        <div className="flex items-center gap-3"><LiveClock /><LangToggle /></div>
       </header>
       {practice && <PracticeBanner />}
 
@@ -202,6 +203,17 @@ export default function Login() {
             </form>
           )}
         </div>
+
+        {/* can't log in? ask the admin or the developer */}
+        <Link href={`/help${valid || practice ? `?${new URLSearchParams({ ...(valid ? { mobile } : {}), ...(practice ? { practice: '1' } : {}) })}` : ''}`}
+          className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 text-maroon shadow-sm transition hover:border-brand/50 hover:bg-brand-50">
+          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-dark"><Icon name="message" className="size-6" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold">{t('help.loginButton')}</span>
+            <span className="block text-sm text-muted">{t('help.loginButtonSub')}</span>
+          </span>
+          <Icon name="chevronRight" className="size-5 shrink-0" />
+        </Link>
       </main>
     </div>
   );
