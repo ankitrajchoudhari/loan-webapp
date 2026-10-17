@@ -48,7 +48,8 @@ model Member {
   id                       String       @id @default(uuid()) @db.Uuid
   memberNo                 Int          @unique @map("member_no")
   fullName                 String       @map("full_name") @db.VarChar(100)
-  mobileNumber             String       @unique @map("mobile_number") @db.VarChar(10)
+  /// may be shared by several accounts (family on one phone) — login then asks which account
+  mobileNumber             String       @map("mobile_number") @db.VarChar(10)
   joinDate                 DateTime     @map("join_date") @db.Date
   monthlyInstallmentPaise  Int          @map("monthly_installment_paise")
   status                   MemberStatus @default(active)
@@ -69,6 +70,7 @@ model Member {
   loanApplications LoanApplication[]
 
   @@index([fullName])
+  @@index([mobileNumber])
   @@map("members")
 }
 

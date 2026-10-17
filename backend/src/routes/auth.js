@@ -61,14 +61,20 @@ router.get('/config', async (_req, res) => {
  * Step 1. Says whose number it is and shows the name the admin entered, so the person can see it is
  * their account before logging in (the samiti chose this over hiding who is a member).
  * Unknown numbers get found: false. The /auth rate limit keeps anyone from trying many numbers quickly.
+ * One number can belong to several member accounts (a family on one phone): all of them are listed
+ * (lowest member no. first = the "main" account) and the person picks one before the date of birth.
  */
 router.post('/identify', async (req, res) => {
   const body = validate(z.object({ mobile }), req.body);
   const staff = await findStaff(body.mobile);
   if (!staff) {
-    const m = await prisma.member.findUnique({ where: { mobileNumber: body.mobile }, select: { fullName: true, memberNo: true, status: true } });
-    const found = Boolean(m && m.status === 'active');
-    return res.json({ kind: 'member', methods: ['dob'], needsCode: false, found, name: found ? m.fullName : null, memberNo: found ? m.memberNo : null });
+    const accounts = await prisma.member.findMany({ where: { mobileNumber: body.mobile, status: 'active' }, select: { id: true, fullName: true, memberNo: true }, orderBy: { memberNo: 'asc' } });
+    const main = accounts[0];
+    return res.json({
+      kind: 'member', methods: ['dob'], needsCode: false, found: Boolean(main),
+      name: main?.fullName ?? null, memberNo: main?.memberNo ?? null,
+      accounts: accounts.map((a) => ({ id: a.id, name: a.fullName, memberNo: a.memberNo })),
+    });
   }
   if (staff.role === 'subadmin') return res.json({ kind: 'subadmin', methods: ['dob'], needsCode: false, found: true, name: staff.name });
   const methods = ['dob', ...(staff.email && firebaseProjectId() ? ['google'] : [])];
@@ -83,6 +89,8 @@ router.post('/login', async (req, res) => {
     dateOfBirth: dateField('dob_invalid').optional(),
     idToken: z.string().optional(),
     code: z.string().trim().max(20).optional(),
+    // which account, when several share this number
+    memberId: z.string().uuid().optional(),
   }), req.body);
   const env = currentEnv();
   const staff = await findStaff(body.mobile);
@@ -115,9 +123,18 @@ router.post('/login', async (req, res) => {
     return res.json({ role: 'admin', env, token, user: { ...staffPublic(staff), staffRole: staff.role } });
   }
 
-  // member: mobile + date of birth, as entered by the admin
-  const member = await prisma.member.findUnique({ where: { mobileNumber: body.mobile } });
-  if (!member || member.status !== 'active' || !member.dateOfBirth) {
+  // member: mobile + date of birth, as entered by the admin. Several accounts may share the number:
+  // the chosen one (memberId) — or, if none was chosen, the only one, or the only one with this date of birth.
+  const accounts = await prisma.member.findMany({ where: { mobileNumber: body.mobile, status: 'active' }, orderBy: { memberNo: 'asc' } });
+  let member;
+  if (body.memberId) member = accounts.find((a) => a.id === body.memberId);
+  else if (accounts.length === 1) member = accounts[0];
+  else if (accounts.length > 1) {
+    const same = accounts.filter((a) => sameDay(a.dateOfBirth, body.dateOfBirth));
+    if (same.length !== 1) throw new HttpError(400, 'choose_account');
+    member = same[0];
+  }
+  if (!member || !member.dateOfBirth) {
     strangerAttempt(`m:${env}:${body.mobile}`);
     throw new HttpError(401, 'member_login_wrong');
   }

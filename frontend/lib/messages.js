@@ -1237,4 +1237,10 @@ export const messages = {
   "platform.memberFeeNow": ["अभी: {{amount}} — बदलाव सिर्फ़ नए भुगतानों पर लागू होगा", "Now: {{amount}} — a change applies to new payments only"],
   "platform.memberFeeIs": ["सदस्यों के हर भुगतान पर {{amount}} शुल्क", "Members pay a {{amount}} fee per payment"],
   "audit.member_fee_changed": ["सदस्यों के भुगतान का शुल्क बदला", "Member payment fee changed"],
+  "login.moreAccounts": ["इस नंबर पर {{n}} और खाता/खाते हैं", "{{n}} more account(s) on this number"],
+  "login.chooseAccount": ["इस नंबर पर {{n}} खाते हैं — अपना खाता चुनें", "{{n}} accounts use this number — choose yours"],
+  "login.mainAccount": ["मुख्य खाता", "main account"],
+  "err.choose_account": ["इस नंबर पर कई खाते हैं — पहले अपना खाता चुनें।", "Several accounts use this number — choose your account first."],
+  "members.sharedNumber": ["यह नंबर पहले से इनका भी है: {{names}}। दोनों खाते एक ही नंबर से जुड़ जाएँगे — लॉगिन पर सदस्य अपना खाता चुनेंगे।", "This number is already used by: {{names}}. The accounts will share it — at login the member picks their account."],
+  "members.sameNumberAs": ["इसी नंबर पर दूसरे खाते:", "Other accounts on this number:"],
 };

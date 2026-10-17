@@ -58,6 +58,14 @@ export default function MemberAccount({ params }) {
           <Row label={t('field.dateOfBirth')} value={m.dateOfBirth ? fmtDate(m.dateOfBirth) : <span className="text-bad">{t('members.dobMissing')}</span>} />
         </div>
         {m.note && <p className="mt-3 text-muted">{m.note}</p>}
+        {member.data?.sharedWith?.length > 0 && (
+          <div className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm">
+            <span className="font-semibold text-brand-dark">{t('members.sameNumberAs')} </span>
+            {member.data.sharedWith.map((x, i) => (
+              <span key={x.id}>{i > 0 && ', '}<Link href={`/admin/members/${x.id}`} className="font-semibold text-maroon underline">{x.fullName} ({t('field.memberNo')} {x.memberNo})</Link></span>
+            ))}
+          </div>
+        )}
         {m.status === 'active' && (
           <div className="no-print mt-4 grid gap-2 sm:grid-cols-2">
             <ButtonLink href={`/admin/installments?member=${id}`} icon="calendarCheck" size="md" full>{t('dash.addInstallment')}</ButtonLink>

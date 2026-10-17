@@ -30,6 +30,7 @@ export default function Login() {
   const [dob, setDob] = useState('1970-01-01');
   const [method, setMethod] = useState('dob');
   const [code, setCode] = useState('');
+  const [account, setAccount] = useState(null); // chosen member account when several share the number
   const [practice, setPractice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -80,7 +81,10 @@ export default function Login() {
       setWhoKind(r);
       setMethod('dob');
       setDob(r.kind === 'member' ? '1970-01-01' : '1980-01-01');
-      setStep('auth');
+      // several accounts on this number → choose one first
+      const many = r.kind === 'member' && (r.accounts?.length ?? 0) > 1;
+      setAccount(r.kind === 'member' && r.accounts?.length === 1 ? r.accounts[0] : null);
+      setStep(many ? 'choose' : 'auth');
       setBusy(false);
     });
   };
@@ -88,7 +92,7 @@ export default function Login() {
   const login = (e) => {
     e.preventDefault();
     go(async () => {
-      const body = { mobile, method, code: who.needsCode ? code : undefined, env };
+      const body = { mobile, method, code: who.needsCode ? code : undefined, env, ...(account ? { memberId: account.id } : {}) };
       if (method === 'google') body.idToken = await googleIdToken();
       else body.dateOfBirth = dob;
       const r = await api('/auth/login', { method: 'POST', body });
@@ -101,6 +105,7 @@ export default function Login() {
     setStep('mobile');
     setError(null);
     setCode('');
+    setAccount(null);
   };
 
   return (
@@ -136,6 +141,7 @@ export default function Login() {
                   <span className="min-w-0">
                     <span className="block truncate text-lg font-bold leading-tight">{known.name}</span>
                     <span className="block text-sm">{known.memberNo ? `${t('field.memberNo')} ${known.memberNo}` : t(`role.${known.kind}`)}</span>
+                    {known.accounts?.length > 1 && <span className="block text-sm font-semibold">{t('login.moreAccounts', { n: known.accounts.length - 1 })}</span>}
                   </span>
                   <Icon name="checkCircle" className="ml-auto size-6 shrink-0" />
                 </div>
@@ -145,15 +151,40 @@ export default function Login() {
               {error && <ErrorBox error={error} />}
               <Button type="submit" full loading={busy} disabled={!valid} icon="chevronRight">{t('login.next')}</Button>
             </form>
+          ) : step === 'choose' ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2">
+                <span className="num font-bold text-maroon">+91 {mobile}</span>
+                <button type="button" onClick={back} className="ml-auto min-h-9 text-sm font-semibold text-maroon underline underline-offset-4">{t('common.change')}</button>
+              </div>
+              <p className="font-semibold">{t('login.chooseAccount', { n: who.accounts.length })}</p>
+              <ul className="space-y-2">
+                {who.accounts.map((a, i) => (
+                  <li key={a.id}>
+                    <button type="button" onClick={() => { setAccount(a); setError(null); setStep('auth'); }}
+                      className="flex w-full items-center gap-3 rounded-2xl border-2 border-line bg-white px-3 py-3 text-left transition hover:border-maroon hover:bg-brand-50 active:scale-[.99]">
+                      <span className={`grid size-11 shrink-0 place-items-center rounded-full text-lg font-bold text-white ${i === 0 ? 'bg-maroon' : 'bg-brand'}`}>{a.name.trim()[0]?.toUpperCase()}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-lg font-bold leading-tight">{a.name}</span>
+                        <span className="block text-sm text-muted">{t('field.memberNo')} {a.memberNo}{i === 0 ? ` · ${t('login.mainAccount')}` : ''}</span>
+                      </span>
+                      <Icon name="chevronRight" className="size-5 shrink-0 text-muted" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : (
             <form onSubmit={login} className="space-y-3" noValidate>
               <div className="flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2">
                 <span className="min-w-0">
-                  {who.name && <span className="block truncate font-bold text-maroon">{who.name}</span>}
-                  <span className={`num block ${who.name ? 'text-sm text-muted' : 'font-bold text-maroon'}`}>+91 {mobile}</span>
+                  {(account?.name ?? who.name) && <span className="block truncate font-bold text-maroon">{account?.name ?? who.name}</span>}
+                  <span className={`num block ${(account?.name ?? who.name) ? 'text-sm text-muted' : 'font-bold text-maroon'}`}>
+                    +91 {mobile}{account ? ` · ${t('field.memberNo')} ${account.memberNo}` : ''}
+                  </span>
                 </span>
                 {staff && <Badge tone="brand">{t(`role.${who.kind}`)}</Badge>}
-                <button type="button" onClick={back} className="ml-auto min-h-9 text-sm font-semibold text-maroon underline underline-offset-4">
+                <button type="button" onClick={() => (who.accounts?.length > 1 ? (setStep('choose'), setError(null)) : back())} className="ml-auto min-h-9 text-sm font-semibold text-maroon underline underline-offset-4">
                   {t('common.change')}
                 </button>
               </div>

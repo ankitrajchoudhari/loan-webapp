@@ -39,10 +39,11 @@ async function assertUnique({ memberNo: no, mobileNumber }, exceptId) {
     if (clash && clash.id !== exceptId) throw new HttpError(409, 'member_no_exists');
   }
   if (mobileNumber) {
-    const clash = await prisma.member.findUnique({ where: { mobileNumber } });
-    if (clash && clash.id !== exceptId) throw new HttpError(409, 'mobile_exists');
+    // a number may be shared by several accounts (family on one phone) — login then asks which one.
+    // A recently deleted number stays blocked unless another account still uses it.
+    const shared = await prisma.member.findFirst({ where: { mobileNumber, ...(exceptId ? { id: { not: exceptId } } : {}) } });
     const deleted = await prisma.deletedMobile.findUnique({ where: { mobileHash: mobileHash(mobileNumber) } });
-    if (deleted && deleted.availableAt > new Date()) {
+    if (!shared && deleted && deleted.availableAt > new Date()) {
       throw new HttpError(409, 'mobile_recently_deleted', { date: deleted.availableAt.toISOString().slice(0, 10) });
     }
   }
@@ -98,7 +99,17 @@ router.post('/', requireAdmin, async (req, res) => {
 router.get('/:id', async (req, res) => {
   assertSelfOrAdmin(req, req.params.id);
   const m = await loadMember(req.params.id);
-  res.json({ member: publicMember(m) });
+  // other accounts on the same number (staff only)
+  const sharedWith = req.user.role === 'admin'
+    ? (await prisma.member.findMany({ where: { mobileNumber: m.mobileNumber, id: { not: m.id } }, select: { id: true, fullName: true, memberNo: true, status: true }, orderBy: { memberNo: 'asc' } }))
+    : undefined;
+  res.json({ member: publicMember(m), sharedWith });
+});
+
+/** Before adding/editing: which accounts already use this number (shown as a note, not an error). */
+router.get('/by-mobile/:mobile', requireAdmin, async (req, res) => {
+  const rows = await prisma.member.findMany({ where: { mobileNumber: String(req.params.mobile) }, select: { id: true, fullName: true, memberNo: true, status: true }, orderBy: { memberNo: 'asc' } });
+  res.json({ members: rows });
 });
 
 router.put('/:id', requireAdmin, async (req, res) => {
@@ -185,10 +196,13 @@ router.delete('/:id', requireAdmin, async (req, res) => {
       loanApplications: (await tx.loanApplication.deleteMany({ where: { memberId: before.id } })).count,
     };
     await tx.auditLog.deleteMany({ where: { memberId: before.id } });
-    await tx.otpToken.deleteMany({ where: { mobileNumber: before.mobileNumber } });
     await tx.member.delete({ where: { id: before.id } });
-    const hash = mobileHash(before.mobileNumber);
-    await tx.deletedMobile.upsert({ where: { mobileHash: hash }, create: { mobileHash: hash, availableAt }, update: { deletedAt: new Date(), availableAt } });
+    // the 7-day lock only when no other account still uses this number
+    if (!(await tx.member.findFirst({ where: { mobileNumber: before.mobileNumber } }))) {
+      await tx.otpToken.deleteMany({ where: { mobileNumber: before.mobileNumber } });
+      const hash = mobileHash(before.mobileNumber);
+      await tx.deletedMobile.upsert({ where: { mobileHash: hash }, create: { mobileHash: hash, availableAt }, update: { deletedAt: new Date(), availableAt } });
+    }
     // no name or number in the log — only that member no. X was deleted, why, and how many records went
     await audit(req, { action: 'member_deleted', entity: 'member', reason: body.reason, after: { memberNo: before.memberNo, ...c } }, tx);
     return c;

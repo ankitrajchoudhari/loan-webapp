@@ -71,7 +71,7 @@ test('admin login: needs right date of birth AND secret code; registration needs
   assert.equal(r.data.env, 'live');
 });
 
-test('add members: auto member number, duplicates of number/mobile refused, validation in codes', async () => {
+test('add members: auto member number, duplicate member number refused, validation in codes', async () => {
   const a = await admin('POST', '/members', { fullName: 'रामलाल शर्मा', mobileNumber: '9811111111', joinDate: dateIn(5, 1), dateOfBirth: '1970-03-15', monthlyInstallmentPaise: '1,000' }, { expect: 201 });
   assert.equal(a.data.member.memberNo, 1);
   assert.equal(a.data.member.monthlyInstallmentPaise, 100000);
@@ -79,7 +79,6 @@ test('add members: auto member number, duplicates of number/mobile refused, vali
   const b = await admin('POST', '/members', { fullName: 'सीता देवी', mobileNumber: '9822222222', joinDate: dateIn(5, 1), dateOfBirth: '1972-08-01', monthlyInstallmentPaise: '1000' }, { expect: 201 });
   ids.b = b.data.member.id;
   assert.equal(b.data.member.memberNo, 2);
-  await admin('POST', '/members', { fullName: 'दोहराव', mobileNumber: '9811111111', joinDate: dateIn(1), dateOfBirth: '1970-01-01', monthlyInstallmentPaise: '1000' }, { expect: 409 });
   await admin('POST', '/members', { memberNo: 2, fullName: 'दोहराव', mobileNumber: '9833333333', joinDate: dateIn(1), dateOfBirth: '1970-01-01', monthlyInstallmentPaise: '1000' }, { expect: 409 });
   const bad = await admin('POST', '/members', { fullName: 'x', mobileNumber: '123', joinDate: '2024-02-30', dateOfBirth: '1970-01-01', monthlyInstallmentPaise: 'abc' }, { expect: 400 });
   const codes = bad.data.error.details.map((d) => d.message).sort();
@@ -713,4 +712,32 @@ test('books balance for every confirmed payment: dues paid + advance kept = amou
   // the installments/repayments written by payments add up to exactly what the allocations say
   const notes = await db.installment.findMany({ where: { voidedAt: null, note: { contains: 'भुगतान #' } } });
   assert.ok(notes.length > 0);
+});
+
+test('several accounts on one number: login lists them, the chosen account + its date of birth logs in; deleting one does not block the number', async () => {
+  const fam = { mobileNumber: '9866666666', joinDate: dateIn(2, 1), monthlyInstallmentPaise: '500' };
+  const papa = await admin('POST', '/members', { ...fam, fullName: 'पिता जी', dateOfBirth: '1960-01-01' }, { expect: 201 });
+  const beta = await admin('POST', '/members', { ...fam, fullName: 'बेटा', dateOfBirth: '1995-05-05' }, { expect: 201 });
+  const id = await agent()('POST', '/auth/identify', { mobile: '9866666666' }, { expect: 200 });
+  assert.equal(id.data.name, 'पिता जी', 'main (first) account name is shown');
+  assert.deepEqual(id.data.accounts.map((a) => a.name), ['पिता जी', 'बेटा']);
+  const shared = await admin('GET', `/members/${papa.data.member.id}`, undefined, { expect: 200 });
+  assert.equal(shared.data.sharedWith[0].fullName, 'बेटा');
+
+  const a = agent();
+  const asBeta = await a('POST', '/auth/login', { mobile: '9866666666', memberId: beta.data.member.id, dateOfBirth: '1995-05-05' }, { expect: 200 });
+  assert.equal(asBeta.data.user.id, beta.data.member.id);
+  const home = await a('GET', '/statements/me/home', undefined, { expect: 200 });
+  assert.equal(home.data.member.fullName, 'बेटा', 'each account sees only its own records');
+  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: papa.data.member.id, dateOfBirth: '1995-05-05' }, { expect: 401 }); // other account's DOB
+  const byDob = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1960-01-01' }, { expect: 200 });
+  assert.equal(byDob.data.user.id, papa.data.member.id, 'no choice sent: the one account with that DOB');
+  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: ids.a, dateOfBirth: '1970-03-15' }, { expect: 401 }); // an account on another number
+
+  const twin = await admin('POST', '/members', { ...fam, fullName: 'जुड़वाँ', dateOfBirth: '1995-05-05' }, { expect: 201 });
+  const ask = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1995-05-05' }, { expect: 400 });
+  assert.equal(ask.data.error.code, 'choose_account');
+
+  await admin('DELETE', `/members/${twin.data.member.id}`, { reason: 'गलती से', confirmName: 'जुड़वाँ' }, { expect: 200 });
+  await admin('POST', '/members', { ...fam, fullName: 'नया', dateOfBirth: '2000-02-02' }, { expect: 201 }); // number still in use → not blocked
 });

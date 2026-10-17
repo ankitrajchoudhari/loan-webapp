@@ -46,7 +46,7 @@ helpPublic.post('/', sendLimit, async (req, res) => {
   const db = liveDb();
   // at most one open request per number: a second "send" just updates it
   const open = await db.helpRequest.findFirst({ where: { mobile: body.mobile, status: { in: ['open', 'seen'] } } });
-  const member = await client(env).member.findUnique({ where: { mobileNumber: body.mobile }, select: { id: true, fullName: true, memberNo: true } });
+  const member = await client(env).member.findFirst({ where: { mobileNumber: body.mobile }, select: { id: true, fullName: true, memberNo: true }, orderBy: { memberNo: 'asc' } });
   const token = crypto.randomBytes(24).toString('hex');
   const data = { name: body.name ?? member?.fullName ?? null, memberId: member?.id ?? null, env, problem: body.problem, message: body.message, sendTo: body.sendTo, tokenHash: hash(token), status: 'open', seenAt: null, seenById: null };
   let h;
