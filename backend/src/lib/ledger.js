@@ -135,7 +135,7 @@ export function monthStatement(member, month, year) {
     isFuture: ym(year, month) > ym(now.year, now.month),
     beforeJoining: ym(year, month) < ymOfDate(member.joinDate),
     installment,
-    earlierArrears: { months: earlier.months, amountPaise: earlier.amountPaise },
+    earlierArrears: { months: earlier.months, amountPaise: earlier.amountPaise, list: (earlier.list ?? []).map((m) => ({ month: m.month, year: m.year, pendingPaise: m.pendingPaise, partial: m.status === 'partial' })) },
     loans,
     loanTotals: sumLoans(loans),
     hasLoans: member.loans.length > 0,

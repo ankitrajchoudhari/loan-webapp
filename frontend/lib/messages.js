@@ -1247,4 +1247,7 @@ export const messages = {
   "pay.changeAmount": ["रकम बदलें", "Change amount"],
   "audit.payment_amount_updated": ["बकाया बदलने पर भुगतान की रकम अपने-आप ठीक हुई", "Payment amount updated to the new dues"],
   "audit.payment_auto_cancelled": ["बकाया जमा हो चुका था, भुगतान अपने-आप रद्द", "Payment cancelled — dues already paid"],
+  "member.thisMonthLeft": ["इस महीने की बाकी किस्त", "Left for this month"],
+  "member.earlierPending": ["पिछले {{n}} महीने की किस्त बाकी", "Earlier month(s) unpaid: {{n}}"],
+  "member.andMore": ["और {{n}} महीने…", "and {{n}} more month(s)…"],
 };

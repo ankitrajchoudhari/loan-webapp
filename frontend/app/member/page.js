@@ -104,7 +104,26 @@ export default function MemberHome() {
           <span className="num text-sm text-muted">/ {money(inst.duePaise)}</span>
         </div>
         <Bar pct={paidPct} />
-        {pending > 0 && <Line label={t('label.pending')} value={money(pending)} tone="bad" />}
+        {inst.pendingPaise > 0 && <Line label={t('member.thisMonthLeft')} value={money(inst.pendingPaise)} tone="bad" />}
+        {earlierArrears.amountPaise > 0 && (
+          <div className="mt-2 rounded-xl border border-bad/25 bg-bad-bg px-3 py-2 text-bad">
+            <div className="flex items-center justify-between gap-2 font-semibold">
+              <span className="flex items-center gap-1.5"><Icon name="alert" className="size-4.5 shrink-0" />{t('member.earlierPending', { n: earlierArrears.months })}</span>
+              <span className="num">{money(earlierArrears.amountPaise)}</span>
+            </div>
+            {earlierArrears.list?.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-sm">
+                {earlierArrears.list.slice(0, 4).map((m) => (
+                  <li key={`${m.year}-${m.month}`} className="flex justify-between gap-2">
+                    <span>{t(`m${m.month}`)} {m.year}{m.partial ? ` (${t('status.partial')})` : ''}</span>
+                    <span className="num">{money(m.pendingPaise)}</span>
+                  </li>
+                ))}
+                {earlierArrears.list.length > 4 && <li className="text-xs">{t('member.andMore', { n: earlierArrears.list.length - 4 })}</li>}
+              </ul>
+            )}
+          </div>
+        )}
         {data.pay?.payablePaise > 0 && (
           <Link href="/member/pay" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-ok px-4 py-3 text-lg font-bold text-white shadow hover:brightness-95 active:scale-[.99]">
             <Icon name="wallet" className="size-5" />{t('pay.payNow', { amount: money(data.pay.payablePaise + (data.pay.feePaise ?? 0)) })}
