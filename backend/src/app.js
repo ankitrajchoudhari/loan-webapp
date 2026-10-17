@@ -68,7 +68,7 @@ export function createApp() {
   api.use('/notifications', notifications);
   api.use('/staff', requireManager, staffRoutes);
   api.use('/settings', (req, res, next) => (req.method === 'GET' ? next() : requireManager(req, res, next)), settings);
-  api.use('/audit-log', requireManager, auditLog);
+  api.use('/audit-log', auditLog); // read-only; every staff member (developer actions show as "support team" to others)
   api.use('/backup', requireManager, backup);
   api.use('/practice', requireManager, practice);
   api.use('/platform', requireManager, platform); // platform fee bills: developer ↔ admin

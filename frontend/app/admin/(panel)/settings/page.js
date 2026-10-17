@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, MoneyInput, Notice, PageTitle, Segmented, Toggle } from '@/components/ui';
-import { ChangeHistory, useAction } from '@/components/admin';
+import { useAction } from '@/components/admin';
 import { useToast } from '@/app/providers';
 import { useApi } from '@/lib/hooks';
 import { api, clearWho, download, getWho } from '@/lib/api';
@@ -25,7 +25,6 @@ export default function Settings() {
       <Defaults settings={data.settings} onSaved={reload} />
       <Practice env={data.env} available={data.testEnv} />
       <Backup />
-      <ChangeLog />
     </div>
   );
 }
@@ -149,27 +148,6 @@ function Backup() {
       <p className="mb-4">{t('settings.backupExplain')}</p>
       {error && <div className="mb-3"><ErrorBox error={error} /></div>}
       <Button icon="download" loading={busy} onClick={() => run(() => download('/backup'), t('settings.backupDone'))}>{t('settings.backupDownload')}</Button>
-    </Card>
-  );
-}
-
-function ChangeLog() {
-  const { t } = useTranslation();
-  const [offset, setOffset] = useState(0);
-  const [entries, setEntries] = useState([]);
-  const { data, loading } = useApi('/audit-log', { limit: 30, offset });
-  useEffect(() => {
-    if (data) setEntries((e) => (offset === 0 ? data.entries : [...e, ...data.entries]));
-  }, [data, offset]);
-  return (
-    <Card title={t('settings.changeLog')} icon="log">
-      <p className="mb-3 text-sm text-muted">{t('settings.changeLogHint')}</p>
-      {loading && !entries.length ? <Loading /> : (
-        <ChangeHistory entries={entries.map((e) => ({ ...e, actorName: e.member ? `${e.actorName ?? ''} → ${e.member.fullName} (${e.member.memberNo})` : e.actorName }))} />
-      )}
-      {data && entries.length < data.total && (
-        <Button variant="secondary" full className="mt-3" loading={loading} onClick={() => setOffset(entries.length)}>{t('common.more')}</Button>
-      )}
     </Card>
   );
 }

@@ -322,7 +322,10 @@ test('team: developer adds admin, admin adds sub-admin with work areas; sub-admi
   await s('POST', '/members', { fullName: 'x' }, { expect: 403 });
   await s('GET', '/loans', undefined, { expect: 403 });
   await s('GET', '/staff', undefined, { expect: 403 });
-  await s('GET', '/audit-log', undefined, { expect: 403 });
+  // sub-admins can read the change history too; the developer's own actions show as the support team
+  const subLog = await s('GET', '/audit-log?limit=200', undefined, { expect: 200 });
+  assert.ok(subLog.data.entries.length > 0);
+  assert.ok(!subLog.data.entries.some((e) => e.actorRole === 'developer'), 'developer is shown as support team');
   // developer sees everything everyone did
   const log = await dev('GET', '/audit-log?limit=200', undefined, { expect: 200 });
   assert.ok(log.data.entries.some((e) => e.actorRole === 'subadmin' && e.action === 'admin_login'));
