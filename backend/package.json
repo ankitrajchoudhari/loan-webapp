@@ -15,7 +15,7 @@
     "restore": "node --env-file=.env scripts/restore.js",
     "test": "node --env-file=.env scripts/test.js",
     "test:unit": "node --test \"test/unit/*.test.js\"",
-    "vercel-build": "prisma generate && node scripts/migrate-all.js && node -e \"require('fs').mkdirSync('public',{recursive:true})\"",
+    "vercel-build": "prisma generate && node scripts/migrate-all.js && node scripts/vercel-output.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
