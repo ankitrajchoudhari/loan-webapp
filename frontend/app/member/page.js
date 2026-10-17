@@ -64,6 +64,8 @@ export default function MemberHome() {
   const paidPct = inst.duePaise ? Math.round((inst.paidPaise * 100) / inst.duePaise) : 100;
   const loanPct = loanTotals?.principalPaise ? Math.floor((loanTotals.principalPaidPaise * 100) / loanTotals.principalPaise) : 0;
   const credit = data.pay?.creditPaise ?? 0;
+  // everything owed now: installments AND loan dues (after any advance) — the same figure the Pay page asks for
+  const owed = data.pay?.payablePaise ?? pending;
 
   return (
     <div className="space-y-3">
@@ -88,9 +90,9 @@ export default function MemberHome() {
             <div className="num text-base font-bold">{fmtDate(member.joinDate)}</div>
           </div>
         </div>
-        <div className={`relative mt-2 flex items-center gap-2 rounded-xl px-3 py-2 font-bold ${pending > 0 ? 'bg-white text-bad' : 'bg-ok text-white'}`}>
-          <Icon name={pending > 0 ? 'alert' : 'checkCircle'} className="size-5 shrink-0" />
-          <span className="flex-1">{pending > 0 ? t('member.dueNow', { amount: money(pending) }) : t('member.allPaid')}</span>
+        <div className={`relative mt-2 flex items-center gap-2 rounded-xl px-3 py-2 font-bold ${owed > 0 ? 'bg-white text-bad' : 'bg-ok text-white'}`}>
+          <Icon name={owed > 0 ? 'alert' : 'checkCircle'} className="size-5 shrink-0" />
+          <span className="flex-1">{owed > 0 ? t('member.dueNow', { amount: money(owed) }) : t('member.allPaid')}</span>
           {credit > 0 && <span className="num rounded-full bg-ok-bg px-2 py-0.5 text-xs text-ok">{t('member.advance', { amount: money(credit) })}</span>}
         </div>
       </section>
