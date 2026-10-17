@@ -53,6 +53,7 @@ export default function Payments() {
       )}
 
       <CashCounter onDone={(p) => router.push(`/receipt/${p.id}?print=1`)} />
+      <MemberFee />
 
       <Segmented value={tab} onChange={setTab} size="sm" options={[
         { value: 'submitted', label: `${t('payAdmin.toCheck')}${data?.counts?.submitted ? ` (${data.counts.submitted})` : ''}` },
@@ -212,5 +213,31 @@ function ShotThumb({ id }) {
         <img src={src} alt={t('pay.shotTitle')} className="mx-auto max-h-[75vh] rounded-xl" />
       </Modal>
     </>
+  );
+}
+
+/** The platform fee added to every member payment (admin, developer, sub-admins with Payments). */
+function MemberFee() {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const { data, reload } = useApi('/payments/member-fee');
+  const [fee, setFee] = useState(null);
+  const { busy, error, run } = useAction(toast);
+  useEffect(() => { if (data) setFee(rupeesText(data.feePaise)); }, [data]);
+  if (!data || fee === null) return null;
+  const save = async () => {
+    if (await run(() => api('/payments/member-fee', { method: 'PUT', body: { feePaise: fee || '0' } }), t('common.savedOk'))) reload();
+  };
+  return (
+    <Card title={t('platform.memberFeeTitle')} icon="users">
+      <div className="space-y-3">
+        <p className="text-sm text-muted">{t('platform.memberFeeHint')}</p>
+        <Field label={t('platform.memberFee')} hint={t('platform.memberFeeNow', { amount: money(data.feePaise) })}>
+          <MoneyInput value={fee} onChange={setFee} />
+        </Field>
+        {error && <ErrorBox error={error} />}
+        <Button icon="check" loading={busy} disabled={toPaise(fee || '0') === data.feePaise} onClick={save}>{t('label.saveChanges')}</Button>
+      </div>
+    </Card>
   );
 }

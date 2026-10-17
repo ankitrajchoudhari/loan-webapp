@@ -183,7 +183,7 @@ export function MemberShell({ children }) {
 }
 
 // Spec §3B main menu, in this order.
-// [href, icon, label, who may see it: null = everyone, 'manager' = developer/admin, else a work area]
+// [href, icon, label, who may see it: null = everyone, 'manager' = developer/admin, 'developer', else a work area]
 const ADMIN_NAV = [
   ['/admin', 'home', 'nav.home', null],
   ['/admin/members', 'users', 'nav.members', 'members'],
@@ -195,7 +195,7 @@ const ADMIN_NAV = [
   ['/admin/reports', 'chart', 'nav.reports', 'reports'],
   ['/admin/team', 'shield', 'nav.team', 'manager'],
   ['/admin/changes', 'log', 'settings.changeLog', null],
-  ['/admin/platform', 'receipt', 'nav.platform', 'manager'],
+  ['/admin/platform', 'receipt', 'nav.platform', 'developer'],
   ['/admin/login-help', 'phone', 'nav.loginHelp', 'manager'],
   ['/admin/support', 'message', 'nav.support', null],
   ['/admin/settings', 'settings', 'nav.settings', 'manager'],
@@ -215,6 +215,7 @@ const ADMIN_TABS = [
 export function allowed(user, need) {
   if (!need) return true;
   const role = user?.staffRole;
+  if (need === 'developer') return role === 'developer';
   if (role === 'developer' || role === 'admin') return true;
   if (need === 'manager') return false;
   return (user?.permissions ?? []).includes(need);

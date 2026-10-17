@@ -1,13 +1,14 @@
-// Platform fee billing between the developer and the samiti (developer + admin only).
-//   developer: switch charging on/off (with rate per day), set the UPI id + QR, confirm or reject payments
-//   admin    : see the running charge and bills, pay by QR, upload the payment screenshot
+// Platform fee billing between the developer and the samiti.
+//   developer: everything — switch charging on/off (rate per day), bills, UPI id + QR, confirm or reject payments
+//   admin    : only GET /due (unpaid bills: month + amount + the developer's QR) and paying one with a screenshot.
+//              The rate, days and history are the developer's alone.
 import { Router } from 'express';
 import { z } from 'zod';
 import { liveDb } from '../lib/db.js';
 import { HttpError, validate, moneyField, reasonField, blankToNull } from '../lib/util.js';
 import { audit } from '../lib/audit.js';
 import { decodePhoto } from '../lib/kyc.js';
-import { DEFAULT_RATE_PAISE, memberFeePaise, ensureBills, currentMonth, screenshotHash, notifyDevelopersOfBill, notifyAdminsOfBill } from '../lib/platform.js';
+import { DEFAULT_RATE_PAISE, ensureBills, currentMonth, screenshotHash, notifyDevelopersOfBill, notifyAdminsOfBill } from '../lib/platform.js';
 
 const router = Router();
 const UPI_RE = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
@@ -44,11 +45,26 @@ async function overview() {
     unpaidCount: unpaid.length,
     unpaidPaise: unpaid.reduce((s, b) => s + b.amountPaise, 0),
     payee: await payee(),
-    memberFeePaise: await memberFeePaise(),
   };
 }
 
-router.get('/', async (_req, res) => res.json(await overview()));
+router.get('/', async (req, res) => {
+  requireDeveloper(req);
+  res.json(await overview());
+});
+
+/** Admin: bills still to pay — month, amount and status only — and the developer's UPI id + QR. */
+router.get('/due', async (_req, res) => {
+  await ensureBills();
+  const bills = await liveDb().platformBill.findMany({ where: { status: { in: ['due', 'rejected', 'submitted'] } }, orderBy: [{ year: 'asc' }, { month: 'asc' }] });
+  const unpaid = bills.filter((b) => b.status !== 'submitted');
+  res.json({
+    bills: bills.map((b) => ({ id: b.id, billNo: b.billNo, month: b.month, year: b.year, amountPaise: b.amountPaise, status: b.status, rejectReason: b.rejectReason, submittedAt: b.submittedAt })),
+    unpaidCount: unpaid.length,
+    unpaidPaise: unpaid.reduce((t, b) => t + b.amountPaise, 0),
+    payee: await payee(),
+  });
+});
 
 /** Developer: start or stop charging. Starting begins from this exact moment. */
 router.post('/toggle', async (req, res) => {
@@ -65,17 +81,6 @@ router.post('/toggle', async (req, res) => {
     await db.platformFeePeriod.update({ where: { id: open.id }, data: { endedAt: now, endedById: req.user.id } });
     await audit(req, { action: 'platform_fee_off', entity: 'settings', after: { until: now.toISOString() } }, db);
   }
-  res.json(await overview());
-});
-
-/** Developer: the platform fee added to each member payment (0 = none). */
-router.put('/member-fee', async (req, res) => {
-  requireDeveloper(req);
-  const body = validate(z.object({ feePaise: moneyField({ min: 0, max: 100_000 }) }), req.body);
-  const db = liveDb();
-  const before = await memberFeePaise();
-  await db.setting.upsert({ where: { key: 'memberFeePaise' }, update: { value: body.feePaise }, create: { key: 'memberFeePaise', value: body.feePaise } });
-  await audit(req, { action: 'member_fee_changed', entity: 'settings', before: { feePaise: before }, after: { feePaise: body.feePaise } }, db);
   res.json(await overview());
 });
 
@@ -123,10 +128,11 @@ router.post('/bills/:id/submit', async (req, res) => {
   });
   await audit(req, { action: 'platform_bill_submitted', entity: 'platform_bill', entityId: b.id, after: { billNo: b.billNo, amountPaise: b.amountPaise, utr: body.utr } }, liveDb());
   await notifyDevelopersOfBill(u);
-  res.json({ bill: billView(u) });
+  res.json({ bill: { id: u.id, status: u.status } });
 });
 
 router.get('/bills/:id/screenshot', async (req, res) => {
+  requireDeveloper(req);
   const b = await liveDb().platformBill.findUnique({ where: { id: req.params.id }, omit: { screenshot: false } });
   if (!b) throw new HttpError(404, 'not_found');
   if (!b.screenshot) throw new HttpError(404, 'not_found');

@@ -43,7 +43,7 @@ export function PayBill({ bill, payee, onDone }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-gradient-to-br from-maroon to-maroon-dark p-4 text-white">
-        <div className="text-sm text-white/80">{t('platform.billNo', { n: bill.billNo })} · {billLine(t, bill)}</div>
+        <div className="text-sm text-white/80">{t('platform.billNo', { n: bill.billNo })} · {t(`m${bill.month}`)} {bill.year}</div>
         <div className="num mt-1 text-3xl font-bold">{money(bill.amountPaise)}</div>
       </div>
       {bill.status === 'rejected' && bill.rejectReason && <Notice tone="bad" icon="alert">{t('platform.rejectedBecause', { reason: bill.rejectReason })}</Notice>}
@@ -108,7 +108,7 @@ export function PlatformBillPopup() {
     if (who?.staffRole !== 'admin') return;
     let later = false;
     try { later = sessionStorage.getItem('samiti.billLater') === '1'; } catch {}
-    api('/platform').then((r) => {
+    api('/platform/due').then((r) => {
       setData(r);
       if (!later && r.bills.some((b) => b.status === 'due' || b.status === 'rejected')) setOpen(true);
     }).catch(() => {});

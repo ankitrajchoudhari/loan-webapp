@@ -15,7 +15,7 @@ import { SUPPORT_NAME, notifyStaffWith } from '../lib/notify.js';
 import { publicMember } from '../lib/ledger.js';
 import { loadMemberForPay, duesOf, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
 import { decodePhoto } from '../lib/kyc.js';
-import { screenshotHash, memberFeePaise } from '../lib/platform.js';
+import { screenshotHash, memberFeePaise, setMemberFeePaise } from '../lib/platform.js';
 
 export const memberPay = Router();
 export const payments = Router();
@@ -149,6 +149,16 @@ payments.get('/', async (req, res) => {
     counts: Object.fromEntries(counts.map((c) => [c.status, c._count])),
     unprinted,
   });
+});
+
+/** The fee added to every member payment: admin, developer and sub-admins with the Payments work area. */
+payments.get('/member-fee', async (_req, res) => res.json({ feePaise: await memberFeePaise() }));
+payments.put('/member-fee', async (req, res) => {
+  const body = validate(z.object({ feePaise: moneyField({ min: 0, max: 100_000 }) }), req.body);
+  const before = await memberFeePaise();
+  await setMemberFeePaise(body.feePaise);
+  await audit(req, { action: 'member_fee_changed', entity: 'settings', before: { feePaise: before }, after: { feePaise: body.feePaise } }, liveDb());
+  res.json({ feePaise: body.feePaise });
 });
 
 /** Dues for one member (counter screen). */

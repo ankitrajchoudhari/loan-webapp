@@ -12,15 +12,14 @@ import { fmtDateTime, money, rupeesText } from '@/lib/format';
 import { compressPhoto } from '@/lib/image';
 
 /**
- * Platform fee (developer ↔ samiti).
- * Developer: switch charging on/off, set the rate per day and the QR to be paid to, confirm payments.
- * Admin: see the running charge and the monthly bills, pay with the QR and send the screenshot.
+ * Platform fee (developer ↔ samiti) — developer only: switch charging on/off, rate per day, the QR to be
+ * paid to, bills, confirm payments. The admin only gets the pay pop-up (month + amount + QR).
  */
 export default function PlatformPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const isDev = getWho()?.user?.staffRole === 'developer';
-  const { data, error, reload } = useApi('/platform');
+  const { data, error, reload } = useApi(isDev ? '/platform' : null);
   const [state, setState] = useState(null);
   const [pay, setPay] = useState(null);
   const [reject, setReject] = useState(null);
@@ -28,6 +27,7 @@ export default function PlatformPage() {
   const d = state ?? data;
   useEffect(() => setState(null), [data]);
 
+  if (!isDev) return <Notice>{t('err.developer_only')}</Notice>;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
   if (!d) return <Loading />;
 
@@ -42,7 +42,6 @@ export default function PlatformPage() {
             <div>
               <div className="font-bold">{d.on ? t('platform.onSince', { date: fmtDateTime(d.since) }) : t('platform.off')}</div>
               <div className="text-sm text-muted">{t('platform.ratePerDay', { amount: money(d.ratePaise) })}</div>
-              <div className="text-sm text-muted">{t('platform.memberFeeIs', { amount: money(d.memberFeePaise) })}</div>
             </div>
           </div>
         </Card>
@@ -156,7 +155,6 @@ function DevControls({ d, onChange }) {
           )}
         </div>
       </Card>
-      <MemberFee d={d} onChange={onChange} />
       <Card title={t('platform.payeeTitle')} icon="wallet">
         <div className="space-y-4">
           <p className="text-sm text-muted">{t('platform.payeeHint')}</p>
@@ -189,30 +187,5 @@ function DevControls({ d, onChange }) {
         </div>
       </Card>
     </>
-  );
-}
-
-
-/** Developer: the platform fee added on top of every member payment (paid to the samiti's QR with the dues). */
-function MemberFee({ d, onChange }) {
-  const { t } = useTranslation();
-  const toast = useToast();
-  const [fee, setFee] = useState(rupeesText(d.memberFeePaise));
-  const { busy, error, run } = useAction(toast);
-  const save = async () => {
-    const r = await run(() => api('/platform/member-fee', { method: 'PUT', body: { feePaise: fee || '0' } }), t('common.savedOk'));
-    if (r) onChange(r);
-  };
-  return (
-    <Card title={t('platform.memberFeeTitle')} icon="users">
-      <div className="space-y-3">
-        <p className="text-sm text-muted">{t('platform.memberFeeHint')}</p>
-        <Field label={t('platform.memberFee')} hint={t('platform.memberFeeNow', { amount: money(d.memberFeePaise) })}>
-          <MoneyInput value={fee} onChange={setFee} />
-        </Field>
-        {error && <ErrorBox error={error} />}
-        <Button icon="check" loading={busy} onClick={save}>{t('label.saveChanges')}</Button>
-      </div>
-    </Card>
   );
 }

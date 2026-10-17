@@ -320,6 +320,8 @@ test('team: developer adds admin, admin adds sub-admin with work areas; sub-admi
   await s('GET', '/members', undefined, { expect: 200 });
   await s('POST', '/members', { fullName: 'x' }, { expect: 403 });
   await s('GET', '/loans', undefined, { expect: 403 });
+  await s('PUT', '/payments/member-fee', { feePaise: '1' }, { expect: 403 }); // no Payments work area
+  await s('GET', '/platform/due', undefined, { expect: 403 });
   await s('GET', '/staff', undefined, { expect: 403 });
   // sub-admins can read the change history too; the developer's own actions show as the support team
   const subLog = await s('GET', '/audit-log?limit=200', undefined, { expect: 200 });
@@ -467,7 +469,8 @@ test('platform fee: developer switches it on, a bill is made when the month ends
   assert.equal(on.data.ratePaise, 1245);
   assert.equal(on.data.current.days, 1, 'today is charged from the moment it is switched on');
   assert.equal(on.data.current.amountPaise, 1245);
-  const seen = await admin('GET', '/platform', undefined, { expect: 200 });
+  await admin('GET', '/platform', undefined, { expect: 403 }); // rate, days, history: developer only
+  const seen = await admin('GET', '/platform/due', undefined, { expect: 200 });
   assert.equal(seen.data.payee.upiId, 'dev@okaxis');
 
   // pretend it was switched on on the 20th of last month → last month's bill = 20th..month end
@@ -476,13 +479,16 @@ test('platform fee: developer switches it on, a bill is made when the month ends
   const last = ym(k);
   const daysInLast = new Date(Date.UTC(last.year, last.month, 0)).getUTCDate();
   await db.platformFeePeriod.updateMany({ data: { startedAt: new Date(Date.UTC(last.year, last.month - 1, 20, 6, 0)) } });
-  const ov = await admin('GET', '/platform', undefined, { expect: 200 });
+  const ov = await dev('GET', '/platform', undefined, { expect: 200 });
   const bill = ov.data.bills.find((x) => x.month === last.month && x.year === last.year);
+  const due = await admin('GET', '/platform/due', undefined, { expect: 200 });
+  assert.equal(due.data.bills[0].amountPaise, (daysInLast - 19) * 1245);
+  assert.equal(due.data.bills[0].days, undefined, 'admin sees the amount only');
   assert.equal(bill.days, daysInLast - 19);
   assert.equal(bill.amountPaise, (daysInLast - 19) * 1245);
   assert.equal(bill.status, 'due');
   assert.equal(ov.data.unpaidCount, 1);
-  assert.equal((await admin('GET', '/platform', undefined, { expect: 200 })).data.bills.length, 1, 'a bill is made only once');
+  assert.equal((await dev('GET', '/platform', undefined, { expect: 200 })).data.bills.length, 1, 'a bill is made only once');
 
   const shot = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 9)]).toString('base64')}`;
   await admin('POST', `/platform/bills/${bill.id}/submit`, {}, { expect: 400 });
@@ -497,7 +503,7 @@ test('platform fee: developer switches it on, a bill is made when the month ends
   await admin('POST', `/platform/bills/${bill.id}/submit`, { screenshot: shot }, { expect: 200 }); // pays again
   const paid = await dev('POST', `/platform/bills/${bill.id}/confirm`, {}, { expect: 200 });
   assert.equal(paid.data.bill.status, 'paid');
-  assert.equal((await admin('GET', '/platform', undefined, { expect: 200 })).data.unpaidCount, 0);
+  assert.equal((await admin('GET', '/platform/due', undefined, { expect: 200 })).data.unpaidCount, 0);
 
   await admin('DELETE', '/platform/payee', undefined, { expect: 403 });
   const removed = await dev('DELETE', '/platform/payee', undefined, { expect: 200 });
@@ -669,10 +675,10 @@ test('login help: anyone can ask the admin or developer; they get a notice, mark
 test('member platform fee: developer sets it; it is added on top, recorded apart, and never reaches dues or credit', async () => {
   const dev = agent();
   await dev('POST', '/auth/login', DEV, { expect: 200 });
-  await admin('PUT', '/platform/member-fee', { feePaise: '0' }, { expect: 403 }); // only the developer
-  await dev('PUT', '/platform/member-fee', { feePaise: '-1' }, { expect: 400 });
-  const set = await dev('PUT', '/platform/member-fee', { feePaise: '5.50' }, { expect: 200 });
-  assert.equal(set.data.memberFeePaise, 550);
+  await admin('PUT', '/payments/member-fee', { feePaise: '-1' }, { expect: 400 });
+  const set = await admin('PUT', '/payments/member-fee', { feePaise: '5.50' }, { expect: 200 }); // the admin controls it
+  assert.equal(set.data.feePaise, 550);
+  assert.equal((await dev('GET', '/payments/member-fee', undefined, { expect: 200 })).data.feePaise, 550);
   assert.equal((await agent()('GET', '/auth/config', undefined, { expect: 200 })).data.memberFeePaise, 550, 'terms page can show it');
 
   const m = agent();
@@ -689,12 +695,12 @@ test('member platform fee: developer sets it; it is added on top, recorded apart
   assert.equal(worth(after) - worth(before), 12345);
 
   // fee 0 → total = amount; an old payment keeps the fee it was made with
-  await dev('PUT', '/platform/member-fee', { feePaise: '0' }, { expect: 200 });
+  await dev('PUT', '/payments/member-fee', { feePaise: '0' }, { expect: 200 });
   const free = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '10' }, { expect: 201 });
   assert.equal(free.data.payment.totalPaise, 1000);
   const old = await m('GET', `/receipts/${cash.data.payment.id}`, undefined, { expect: 200 });
   assert.equal(old.data.payment.feePaise, 550);
-  await dev('PUT', '/platform/member-fee', { feePaise: '4' }, { expect: 200 });
+  await admin('PUT', '/payments/member-fee', { feePaise: '4' }, { expect: 200 });
 });
 
 test('books balance for every confirmed payment: dues paid + advance kept = amount + advance used; fee never in the books', async () => {
