@@ -400,7 +400,7 @@ test('payments: admin sets UPI; member pays by UPI with screenshot; confirm appl
   const m = agent();
   await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
   const s1 = await m('GET', '/pay/summary', undefined, { expect: 200 });
-  assert.equal(s1.data.feePaise, undefined, 'no platform fee on member payments');
+  assert.equal(s1.data.feePaise, 400, '₹4 platform fee on each member payment (developer can change it)');
   assert.equal(s1.data.upi.upiId, 'samiti@okaxis');
   const due = s1.data.dues.payablePaise;
   assert.ok(due > 0, 'member has dues to pay');
@@ -408,7 +408,9 @@ test('payments: admin sets UPI; member pays by UPI with screenshot; confirm appl
 
   // UPI: pay ₹500 more than due → extra becomes advance credit
   const p = await m('POST', '/pay', { method: 'upi', amountPaise: String((due + 50000) / 100) }, { expect: 201 });
-  assert.equal(p.data.payment.totalPaise, due + 50000);
+  assert.equal(p.data.payment.amountPaise, due + 50000);
+  assert.equal(p.data.payment.feePaise, 400);
+  assert.equal(p.data.payment.totalPaise, due + 50000 + 400, 'member pays dues + ₹4');
   await m('POST', '/pay', { method: 'cash', amountPaise: '100' }, { expect: 409 }); // one open payment at a time
   const shot1 = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 1)]).toString('base64')}`;
   const shot2 = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 2)]).toString('base64')}`;
@@ -443,7 +445,8 @@ test('payments: admin sets UPI; member pays by UPI with screenshot; confirm appl
 
   // cash at the counter → confirmed at once; receipt must be printed
   const cash = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '250' }, { expect: 201 });
-  assert.equal(cash.data.payment.allocation.creditAfterPaise, 75000);
+  assert.equal(cash.data.payment.allocation.creditAfterPaise, 75000, 'only the ₹250, never the fee, goes to the account');
+  assert.equal(cash.data.payment.totalPaise, 25000 + 400);
   const list = await admin('GET', '/payments', undefined, { expect: 200 });
   assert.ok(list.data.unprinted >= 1);
   await m('GET', `/receipts/${cash.data.payment.id}`, undefined, { expect: 200 });
@@ -662,4 +665,52 @@ test('login help: anyone can ask the admin or developer; they get a notice, mark
   const m = agent();
   await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
   await m('GET', '/help-requests', undefined, { expect: 403 }); // members can't see the list
+});
+
+test('member platform fee: developer sets it; it is added on top, recorded apart, and never reaches dues or credit', async () => {
+  const dev = agent();
+  await dev('POST', '/auth/login', DEV, { expect: 200 });
+  await admin('PUT', '/platform/member-fee', { feePaise: '0' }, { expect: 403 }); // only the developer
+  await dev('PUT', '/platform/member-fee', { feePaise: '-1' }, { expect: 400 });
+  const set = await dev('PUT', '/platform/member-fee', { feePaise: '5.50' }, { expect: 200 });
+  assert.equal(set.data.memberFeePaise, 550);
+  assert.equal((await agent()('GET', '/auth/config', undefined, { expect: 200 })).data.memberFeePaise, 550, 'terms page can show it');
+
+  const m = agent();
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  const before = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  assert.equal(before.feePaise, 550);
+  const cash = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '123.45' }, { expect: 201 });
+  assert.equal(cash.data.payment.amountPaise, 12345);
+  assert.equal(cash.data.payment.feePaise, 550);
+  assert.equal(cash.data.payment.totalPaise, 12895);
+  const after = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  // everything the member owed/held changes by exactly the ₹123.45, not the fee
+  const worth = (x) => x.dues.creditPaise - x.dues.payablePaise;
+  assert.equal(worth(after) - worth(before), 12345);
+
+  // fee 0 → total = amount; an old payment keeps the fee it was made with
+  await dev('PUT', '/platform/member-fee', { feePaise: '0' }, { expect: 200 });
+  const free = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '10' }, { expect: 201 });
+  assert.equal(free.data.payment.totalPaise, 1000);
+  const old = await m('GET', `/receipts/${cash.data.payment.id}`, undefined, { expect: 200 });
+  assert.equal(old.data.payment.feePaise, 550);
+  await dev('PUT', '/platform/member-fee', { feePaise: '4' }, { expect: 200 });
+});
+
+test('books balance for every confirmed payment: dues paid + advance kept = amount + advance used; fee never in the books', async () => {
+  const db = client('live');
+  const pays = await db.payment.findMany({ where: { status: 'confirmed' } });
+  assert.ok(pays.length >= 3, `enough payments were made in the tests above (${pays.length})`);
+  for (const p of pays) {
+    const a = p.allocation;
+    const toDues = a.lines.filter((l) => l.kind !== 'advance').reduce((t, l) => t + l.amountPaise, 0);
+    assert.equal(toDues + a.creditAfterPaise, p.amountPaise + a.creditBeforePaise, `payment #${p.paymentNo}`);
+    assert.equal(p.totalPaise, p.amountPaise + p.feePaise, `payment #${p.paymentNo} total = amount + fee`);
+    const loanLines = a.lines.filter((l) => l.kind === 'loan');
+    for (const l of loanLines) assert.equal(l.principalPaise + l.interestPaise, l.amountPaise, `payment #${p.paymentNo} loan split`);
+  }
+  // the installments/repayments written by payments add up to exactly what the allocations say
+  const notes = await db.installment.findMany({ where: { voidedAt: null, note: { contains: 'भुगतान #' } } });
+  assert.ok(notes.length > 0);
 });

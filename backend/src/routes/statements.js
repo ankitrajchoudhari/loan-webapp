@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { parseMonthYear, HttpError } from '../lib/util.js';
 import { loadMember, memberHome, monthStatement, memberHistory } from '../lib/ledger.js';
 import { duesOf } from '../lib/payments.js';
+import { memberFeePaise } from '../lib/platform.js';
 import { assertSelfOrAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -17,7 +18,7 @@ function memberIdFor(req) {
 router.get('/:id/home', async (req, res) => {
   const member = await loadMember(memberIdFor(req));
   const dues = duesOf(member);
-  res.json({ ...memberHome(member), pay: { payablePaise: dues.payablePaise, creditPaise: dues.creditPaise } });
+  res.json({ ...memberHome(member), pay: { payablePaise: dues.payablePaise, creditPaise: dues.creditPaise, feePaise: await memberFeePaise() } });
 });
 
 router.get('/:id/month', async (req, res) => {

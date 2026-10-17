@@ -15,7 +15,7 @@ import { SUPPORT_NAME, notifyStaffWith } from '../lib/notify.js';
 import { publicMember } from '../lib/ledger.js';
 import { loadMemberForPay, duesOf, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
 import { decodePhoto } from '../lib/kyc.js';
-import { screenshotHash } from '../lib/platform.js';
+import { screenshotHash, memberFeePaise } from '../lib/platform.js';
 
 export const memberPay = Router();
 export const payments = Router();
@@ -48,6 +48,7 @@ memberPay.get('/summary', async (req, res) => {
   res.json({
     member: publicMember(member),
     dues: duesOf(member),
+    feePaise: await memberFeePaise(),
     upi: upi ? { upiId: upi.upiId, payeeName: upi.payeeName, qrImage: upi.qrImage } : null,
     open: open.map((p) => paymentView(p)),
   });
@@ -67,14 +68,16 @@ memberPay.post('/', async (req, res) => {
   // one open request at a time keeps things simple for members and staff
   const open = await prisma.payment.findFirst({ where: { memberId, status: { in: ['initiated', 'submitted'] } } });
   if (open) throw new HttpError(409, 'payment_open', { paymentId: open.id });
+  const fee = await memberFeePaise();
   const p = await prisma.payment.create({
     data: {
       paymentNo: await nextPaymentNo(prisma),
       memberId,
       method: body.method,
+      // amountPaise goes to the member's dues; the fee is recorded separately and never touches the books
       amountPaise: body.amountPaise,
-      feePaise: 0,
-      totalPaise: body.amountPaise,
+      feePaise: fee,
+      totalPaise: body.amountPaise + fee,
       // cash waits for the admin; UPI waits for the member's screenshot
       status: body.method === 'cash' ? 'submitted' : 'initiated',
       submittedAt: body.method === 'cash' ? new Date() : null,
@@ -151,7 +154,7 @@ payments.get('/', async (req, res) => {
 /** Dues for one member (counter screen). */
 payments.get('/due/:memberId', async (req, res) => {
   const member = await loadMemberForPay(prisma, req.params.memberId);
-  res.json({ member: publicMember(member), dues: duesOf(member) });
+  res.json({ member: publicMember(member), dues: duesOf(member), feePaise: await memberFeePaise() });
 });
 
 /** Applies a payment to dues. `req.user` is the confirming staff member. */
@@ -196,10 +199,11 @@ payments.post('/:id/reject', async (req, res) => {
 payments.post('/cash', async (req, res) => {
   const body = validate(z.object({ memberId: z.string().uuid('member_required'), amountPaise: moneyField({ min: 100, max: 100_000_000 }), note: blankToNull(z.string().max(300)) }), req.body);
   const member = await loadMemberForPay(prisma, body.memberId);
+  const fee = await memberFeePaise();
   const p = await prisma.payment.create({
     data: {
-      paymentNo: await nextPaymentNo(prisma), memberId: member.id, method: 'cash', amountPaise: body.amountPaise, feePaise: 0,
-      totalPaise: body.amountPaise, status: 'submitted', submittedAt: new Date(), dueSnapshot: duesOf(member), createdById: req.user.id,
+      paymentNo: await nextPaymentNo(prisma), memberId: member.id, method: 'cash', amountPaise: body.amountPaise, feePaise: fee,
+      totalPaise: body.amountPaise + fee, status: 'submitted', submittedAt: new Date(), dueSnapshot: duesOf(member), createdById: req.user.id,
     },
   });
   const u = await confirmPayment(req, p);

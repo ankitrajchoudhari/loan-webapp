@@ -8,6 +8,7 @@ import { HttpError, validate, dateField, iso, parseDate } from '../lib/util.js';
 import { audit } from '../lib/audit.js';
 import { verifyFirebaseToken, firebaseProjectId } from '../lib/firebase.js';
 import { staffPublic } from '../lib/staff.js';
+import { memberFeePaise } from '../lib/platform.js';
 import { issueSession, clearSession, requireLogin } from '../middleware/auth.js';
 
 const router = Router();
@@ -52,8 +53,8 @@ const sameDay = (stored, given) => {
 
 const findStaff = (m) => liveDb().adminUser.findFirst({ where: { mobileNumber: m, status: 'active' } });
 
-router.get('/config', (_req, res) => {
-  res.json({ testEnv: testEnvAvailable(), firebase: Boolean(firebaseProjectId()) });
+router.get('/config', async (_req, res) => {
+  res.json({ testEnv: testEnvAvailable(), firebase: Boolean(firebaseProjectId()), memberFeePaise: await memberFeePaise() });
 });
 
 /**

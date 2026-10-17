@@ -7,7 +7,7 @@ import { liveDb } from '../lib/db.js';
 import { HttpError, validate, moneyField, reasonField, blankToNull } from '../lib/util.js';
 import { audit } from '../lib/audit.js';
 import { decodePhoto } from '../lib/kyc.js';
-import { DEFAULT_RATE_PAISE, ensureBills, currentMonth, screenshotHash, notifyDevelopersOfBill, notifyAdminsOfBill } from '../lib/platform.js';
+import { DEFAULT_RATE_PAISE, memberFeePaise, ensureBills, currentMonth, screenshotHash, notifyDevelopersOfBill, notifyAdminsOfBill } from '../lib/platform.js';
 
 const router = Router();
 const UPI_RE = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
@@ -44,6 +44,7 @@ async function overview() {
     unpaidCount: unpaid.length,
     unpaidPaise: unpaid.reduce((s, b) => s + b.amountPaise, 0),
     payee: await payee(),
+    memberFeePaise: await memberFeePaise(),
   };
 }
 
@@ -64,6 +65,17 @@ router.post('/toggle', async (req, res) => {
     await db.platformFeePeriod.update({ where: { id: open.id }, data: { endedAt: now, endedById: req.user.id } });
     await audit(req, { action: 'platform_fee_off', entity: 'settings', after: { until: now.toISOString() } }, db);
   }
+  res.json(await overview());
+});
+
+/** Developer: the platform fee added to each member payment (0 = none). */
+router.put('/member-fee', async (req, res) => {
+  requireDeveloper(req);
+  const body = validate(z.object({ feePaise: moneyField({ min: 0, max: 100_000 }) }), req.body);
+  const db = liveDb();
+  const before = await memberFeePaise();
+  await db.setting.upsert({ where: { key: 'memberFeePaise' }, update: { value: body.feePaise }, create: { key: 'memberFeePaise', value: body.feePaise } });
+  await audit(req, { action: 'member_fee_changed', entity: 'settings', before: { feePaise: before }, after: { feePaise: body.feePaise } }, db);
   res.json(await overview());
 });
 

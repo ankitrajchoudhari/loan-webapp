@@ -105,8 +105,11 @@ export default function MemberHome() {
         {pending > 0 && <Line label={t('label.pending')} value={money(pending)} tone="bad" />}
         {data.pay?.payablePaise > 0 && (
           <Link href="/member/pay" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-ok px-4 py-3 text-lg font-bold text-white shadow hover:brightness-95 active:scale-[.99]">
-            <Icon name="wallet" className="size-5" />{t('pay.payNow', { amount: money(data.pay.payablePaise) })}
+            <Icon name="wallet" className="size-5" />{t('pay.payNow', { amount: money(data.pay.payablePaise + (data.pay.feePaise ?? 0)) })}
           </Link>
+        )}
+        {data.pay?.payablePaise > 0 && data.pay.feePaise > 0 && (
+          <p className="mt-1 text-center text-xs text-muted">{t('pay.feeNote', { dues: money(data.pay.payablePaise), fee: money(data.pay.feePaise) })}</p>
         )}
       </Box>
 

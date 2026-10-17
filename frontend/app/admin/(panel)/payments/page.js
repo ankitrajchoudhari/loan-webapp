@@ -78,6 +78,7 @@ export default function Payments() {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <span>{t('pay.total')}: <b className="num text-base">{money(p.totalPaise)}</b></span>
+                {p.feePaise > 0 && <span className="text-muted">({t('pay.toSamiti')} {money(p.amountPaise)} + {t('pay.fee')} {money(p.feePaise)})</span>}
                 {p.hasScreenshot && <ShotThumb id={p.id} />}
               </div>
               {p.rejectReason && <div className="mt-1 text-sm text-bad">{p.rejectReason}</div>}
@@ -134,6 +135,8 @@ function ConfirmModal({ p, onClose, onDone }) {
           <img src={`/api/v1/receipts/${p.id}/screenshot`} alt={t('pay.shotTitle')} className="mx-auto max-h-[45vh] rounded-xl border border-line" />
         )}
         <Row label={t('field.memberName')} value={p.member?.fullName} />
+        {p.feePaise > 0 && <Row label={t('pay.toSamiti')} value={money(p.amountPaise)} />}
+        {p.feePaise > 0 && <Row label={t('pay.fee')} value={money(p.feePaise)} />}
         <Row label={t('pay.total')} value={money(p.totalPaise)} strong />
         <p className="text-sm text-muted">{t('payAdmin.applyNote')}</p>
         {error && <ErrorBox error={error} />}
@@ -179,7 +182,9 @@ function CashCounter({ onDone }) {
             </div>
             <Field label={t('pay.amount')} hint={t('pay.amountHint')}><MoneyInput value={amount} onChange={setAmount} /></Field>
             <div className="rounded-xl bg-stone-50 px-3 py-2">
-              <Row label={t('payAdmin.collect')} value={money(amt)} strong />
+              {due.feePaise > 0 && <Row label={t('pay.toSamiti')} value={money(amt)} />}
+              {due.feePaise > 0 && <Row label={t('pay.fee')} value={money(due.feePaise)} />}
+              <Row label={t('payAdmin.collect')} value={money(amt + (due.feePaise ?? 0))} strong />
             </div>
             {error && <ErrorBox error={error} />}
             <Button full icon="check" loading={busy} disabled={amt < 100} onClick={save}>{t('payAdmin.saveAndPrint')}</Button>

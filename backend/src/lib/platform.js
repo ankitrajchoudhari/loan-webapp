@@ -10,6 +10,14 @@ import { liveDb } from './db.js';
 import { notify, developerIds } from './notify.js';
 
 export const DEFAULT_RATE_PAISE = 1245;
+/** Platform fee added to every member payment (on top of the dues), set by the developer. */
+export const DEFAULT_MEMBER_FEE_PAISE = 400;
+
+export async function memberFeePaise() {
+  const s = await liveDb().setting.findUnique({ where: { key: 'memberFeePaise' } });
+  const v = Number(s?.value);
+  return Number.isInteger(v) && v >= 0 ? v : DEFAULT_MEMBER_FEE_PAISE;
+}
 
 const istFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
 export const istDate = (d) => istFmt.format(d);

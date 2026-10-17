@@ -80,6 +80,7 @@ function Outcome({ payment }) {
 function NewPayment({ data, onCreated }) {
   const { t } = useTranslation();
   const { dues } = data;
+  const feePaise = data.feePaise ?? 0;
   const [amount, setAmount] = useState(dues.payablePaise ? rupeesText(dues.payablePaise) : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -122,7 +123,9 @@ function NewPayment({ data, onCreated }) {
           {amountPaise > 0 && diff > 0 && <Notice tone="ok" icon="check">{t('pay.moreThanDue', { amount: money(diff) })}</Notice>}
           {amountPaise > 0 && diff < 0 && <Notice>{t('pay.lessThanDue', { amount: money(-diff) })}</Notice>}
           <div className="rounded-xl bg-stone-50 px-3 py-2">
-            <Row label={t('pay.total')} value={money(amountPaise)} strong />
+            {feePaise > 0 && <Row label={t('pay.toSamiti')} value={money(amountPaise)} />}
+            {feePaise > 0 && <Row label={t('pay.fee')} value={money(feePaise)} />}
+            <Row label={t('pay.total')} value={money(amountPaise + feePaise)} strong />
           </div>
           {error && <ErrorBox error={error} />}
           <div className="space-y-2 pt-1">
@@ -131,7 +134,7 @@ function NewPayment({ data, onCreated }) {
                 className="flex w-full items-center gap-3 rounded-2xl bg-ok px-4 py-3.5 text-left text-white shadow-md transition hover:brightness-95 disabled:opacity-60">
                 <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/15"><Icon name="wallet" className="size-6" /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold leading-tight">{t('pay.upiApp', { amount: money(amountPaise) })}</span>
+                  <span className="block text-lg font-bold leading-tight">{t('pay.upiApp', { amount: money(amountPaise + feePaise) })}</span>
                   <span className="block text-sm text-white/85">{t('pay.upiAppSub')}</span>
                 </span>
                 <Icon name="chevronRight" className="size-5 shrink-0" />
@@ -198,6 +201,8 @@ function OpenPayment({ payment, upi, onChange }) {
     <Card title={t('pay.paymentNo', { n: p.paymentNo })} icon="receipt" action={<Badge tone={STATUS_TONE[p.status]}>{t(`payStatus.${p.status}`)}</Badge>}>
       <div className="space-y-4">
         <div className="rounded-xl bg-stone-50 px-3 py-2">
+          {p.feePaise > 0 && <Row label={t('pay.toSamiti')} value={money(p.amountPaise)} />}
+          {p.feePaise > 0 && <Row label={t('pay.fee')} value={money(p.feePaise)} />}
           <Row label={t('pay.total')} value={money(p.totalPaise)} strong />
         </div>
 
