@@ -2,7 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run vercel-build",
   "functions": {
-    "api/index.js": { "maxDuration": 30, "includeFiles": "node_modules/.prisma/client/**" }
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/.prisma/client/**"
+    }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "outputDirectory": "public"
 }

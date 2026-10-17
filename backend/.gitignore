@@ -5,3 +5,4 @@ backups
 .vercel
 .env.*
 !.env.example
+public
