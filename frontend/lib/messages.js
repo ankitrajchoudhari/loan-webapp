@@ -1250,4 +1250,10 @@ export const messages = {
   "member.thisMonthLeft": ["इस महीने की बाकी किस्त", "Left for this month"],
   "member.earlierPending": ["पिछले {{n}} महीने की किस्त बाकी", "Earlier month(s) unpaid: {{n}}"],
   "member.andMore": ["और {{n}} महीने…", "and {{n}} more month(s)…"],
+  "loans.term": ["कितनी किस्तें (महीने)", "Number of EMIs (months)"],
+  "loans.termHint": ["ब्याज सिर्फ़ {{n}} महीने लगेगा — देर से चुकाने पर भी इससे ज़्यादा नहीं।", "Interest is charged for {{n}} months only — never more, even if repaid late."],
+  "loans.termEmptyHint": ["खाली छोड़ें = जब तक मूल बाकी है, हर महीने ब्याज लगेगा।", "Leave empty = interest every month while any principal is unpaid."],
+  "loans.termUse": ["किस्त के हिसाब से {{n}} किस्तें — यही रखें", "The EMI means {{n}} EMIs — use this"],
+  "loan.forEmis": ["{{n}} किस्तों तक", "for {{n}} EMIs"],
+  "err.term_invalid": ["किस्तों की गिनती 1 से 600 के बीच होनी चाहिए।", "Number of EMIs must be between 1 and 600."],
 };

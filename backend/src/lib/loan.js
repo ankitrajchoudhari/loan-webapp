@@ -31,6 +31,17 @@ export function interestForMonth(loan, openingPrincipal) {
 export const interestStartYm = (loan) => ym(loan.interestFromYear, loan.interestFromMonth);
 
 /**
+ * Interest for month k: none before the "interest from" month, and none after the agreed number of
+ * EMIs (termMonths) — e.g. 10 EMIs → interest for exactly 10 months, however late the repayment.
+ */
+export function interestInMonth(loan, k, openingPrincipal) {
+  const fromK = interestStartYm(loan);
+  if (k < fromK) return 0;
+  if (loan.termMonths && k >= fromK + loan.termMonths) return 0;
+  return interestForMonth(loan, openingPrincipal);
+}
+
+/**
  * Month-by-month ledger from the month the loan was taken up to `asOfYm` (inclusive).
  * Each row: opening principal, interest charged, principal/interest paid in that month, closing balances.
  */
@@ -39,7 +50,6 @@ export function loanLedger(loan, repayments, asOfYm) {
     .map((r) => ({ ...r, k: ymOfDate(r.paidOn) }))
     .sort((a, b) => a.k - b.k || new Date(a.paidOn) - new Date(b.paidOn));
   const startK = ymOfDate(loan.takenOn);
-  const fromK = interestStartYm(loan);
   const rows = [];
 
   let principalLeft = loan.principalPaise;
@@ -50,7 +60,7 @@ export function loanLedger(loan, repayments, asOfYm) {
 
   for (let k = startK; k <= asOfYm; k++) {
     const opening = principalLeft;
-    const charged = k >= fromK ? interestForMonth(loan, opening) : 0;
+    const charged = interestInMonth(loan, k, opening);
     const inMonth = pays.filter((p) => p.k === k);
     const pPaid = inMonth.reduce((s, p) => s + p.principalPaise, 0);
     const iPaid = inMonth.reduce((s, p) => s + p.interestPaise, 0);
@@ -120,6 +130,7 @@ export function loanPosition(loan, repayments, asOfYm) {
     fixedInterestPaise: loan.fixedInterestPaise,
     installmentPaise: loan.installmentPaise,
     openingInterestPaise: loan.openingInterestPaise,
+    termMonths: loan.termMonths ?? null,
     interestFrom: { month: loan.interestFromMonth, year: loan.interestFromYear },
     // this month
     monthInterestPaise: month.interestCharged,
@@ -135,7 +146,7 @@ export function loanPosition(loan, repayments, asOfYm) {
     interestOutstandingPaise: totals.interestOutstanding,
     totalOutstandingPaise: totals.totalOutstanding,
     // what next month's interest would be on today's balance
-    nextMonthInterestPaise: interestForMonth(loan, totals.principalOutstanding),
+    nextMonthInterestPaise: interestInMonth(loan, asOfYm + 1, totals.principalOutstanding),
     closed: totals.principalOutstanding <= 0 && totals.interestOutstanding <= 0,
   };
 }
@@ -224,10 +235,9 @@ export function simulate(loan, state, installment, { maxMonths = 600, firstPayme
   let principal = state.principal;
   let interestDue = state.interestDue;
   let totalInterest = 0;
-  const fromK = interestStartYm(loan);
   if (installment <= 0) return { feasible: false, rows, months: null, totalInterest: null, totalPayable: null, payoff: null };
   for (let i = 0, k = state.startK; i < maxMonths && (principal > 0 || interestDue > 0); i++, k++) {
-    const charge = (i > 0 || state.chargeFirst) && k >= fromK ? interestForMonth(loan, principal) : 0;
+    const charge = (i > 0 || state.chargeFirst) ? interestInMonth(loan, k, principal) : 0;
     interestDue += charge;
     totalInterest += charge;
     const pay = Math.min(i === 0 && firstPayment != null ? firstPayment : installment, principal + interestDue);

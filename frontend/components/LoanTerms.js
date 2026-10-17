@@ -17,6 +17,7 @@ export const emptyTerms = (settings, today) => ({
   customFrom: false,
   interestFrom: null,
   installment: '',
+  term: '',
   openingInterest: '',
   note: '',
 });
@@ -31,6 +32,7 @@ export const termsFromLoan = (l) => ({
   customFrom: true,
   interestFrom: { month: l.interestFromMonth, year: l.interestFromYear },
   installment: rupeesText(l.installmentPaise),
+  term: l.termMonths ? String(l.termMonths) : '',
   openingInterest: rupeesText(l.openingInterestPaise),
   note: l.note ?? '',
 });
@@ -46,6 +48,7 @@ export const termsBody = (f) => ({
   interestFromMonth: f.customFrom && f.interestFrom ? f.interestFrom.month : '',
   interestFromYear: f.customFrom && f.interestFrom ? f.interestFrom.year : '',
   installmentPaise: f.installment,
+  termMonths: f.term || '',
   openingInterestPaise: f.openingInterest,
   note: f.note,
 });
@@ -72,7 +75,7 @@ function AutoEmi({ f, setF }) {
       })
         .then((r) => {
           setPlan(r);
-          setF((s) => ({ ...s, installment: rupeesText(r.installmentPaise) }));
+          setF((s) => ({ ...s, installment: rupeesText(r.installmentPaise), term: s.months }));
         })
         .catch(() => setPlan(null));
     }, 350);
@@ -159,6 +162,7 @@ export default function LoanTerms({ f, setF, showOld = true, autoEmi = true }) {
         <Field label={t('loans.installment')} hint={t('loans.installmentHint')}>
           <MoneyInput value={f.installment} onChange={(v) => setF((s) => ({ ...s, installment: v, months: '' }))} />
         </Field>
+        <TermField f={f} setF={setF} />
         {showOld && (
           <Field label={t('loans.openingInterest')} hint={t('loans.openingInterestHint')}>
             <MoneyInput value={f.openingInterest} onChange={set('openingInterest')} />
@@ -170,5 +174,38 @@ export default function LoanTerms({ f, setF, showOld = true, autoEmi = true }) {
         <TextArea value={f.note} onChange={(e) => set('note')(e.target.value)} rows={2} maxLength={500} />
       </Field>
     </div>
+  );
+}
+
+/** Monthly interest on the full amount (flat / fixed) — used to suggest the number of EMIs from the EMI. */
+function monthlyInterestPaise(f) {
+  const P = toPaise(f.principal) ?? 0;
+  if (f.interestMethod === 'fixed') return toPaise(f.fixedInterest) ?? 0;
+  if (f.interestMethod !== 'flat') return null;
+  const rate = Number(String(f.rate).replace(/,/g, ''));
+  if (!Number.isFinite(rate)) return null;
+  return Math.round((P * rate) / 100 / (f.ratePeriod === 'year' ? 12 : 1));
+}
+
+/**
+ * Agreed number of EMIs: interest is charged only for these months, so a 10-EMI loan never costs more
+ * than 10 months of interest, even if repaid late. Empty = interest every month until repaid.
+ */
+function TermField({ f, setF }) {
+  const { t } = useTranslation();
+  const P = toPaise(f.principal) ?? 0;
+  const emi = toPaise(f.installment) ?? 0;
+  const mi = monthlyInterestPaise(f);
+  const suggested = mi != null && emi > mi && P > 0 ? Math.ceil(P / (emi - mi)) : null;
+  return (
+    <Field label={t('loans.term')} hint={f.term ? t('loans.termHint', { n: f.term }) : t('loans.termEmptyHint')}>
+      <Input inputMode="numeric" value={f.term ?? ''} placeholder={suggested ? String(suggested) : '10'} className="num"
+        onChange={(e) => setF((s) => ({ ...s, term: e.target.value.replace(/\D/g, '').slice(0, 3) }))} />
+      {suggested && String(suggested) !== String(f.term) && suggested <= 600 && (
+        <button type="button" onClick={() => setF((s) => ({ ...s, term: String(suggested) }))} className="mt-1 text-sm font-semibold text-maroon underline underline-offset-4">
+          {t('loans.termUse', { n: suggested })}
+        </button>
+      )}
+    </Field>
   );
 }

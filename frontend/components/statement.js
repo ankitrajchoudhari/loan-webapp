@@ -7,9 +7,10 @@ export const methodLabel = (t, m) => (m ? t(`pay.${m}`) : '—');
 
 /** "2% हर महीने · बाकी मूल राशि पर" — the loan's interest rule in words. */
 export function interestRule(t, loan) {
-  if (loan.interestMethod === 'fixed') return t('loan.rule.fixed', { amount: money(loan.fixedInterestPaise) });
+  if (loan.interestMethod === 'fixed') return `${t('loan.rule.fixed', { amount: money(loan.fixedInterestPaise) })}${loan.termMonths ? ` · ${t('loan.forEmis', { n: loan.termMonths })}` : ''}`;
   const rate = `${ratePct(loan.rateBp)} ${t(loan.ratePeriod === 'year' ? 'loan.perYear' : 'loan.perMonth')}`;
-  return t(`loan.rule.${loan.interestMethod}`, { rate });
+  const rule = t(`loan.rule.${loan.interestMethod}`, { rate });
+  return loan.termMonths ? `${rule} · ${t('loan.forEmis', { n: loan.termMonths })}` : rule;
 }
 
 /** Interest still owed; a negative figure means interest paid in advance. */

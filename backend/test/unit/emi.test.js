@@ -54,3 +54,18 @@ test('insights: overdue counts only finished months; due-now adds this month', (
   assert.ok(ins.plan.feasible && ins.plan.months > 0);
   assert.equal(ins.repaidPercent, 8);
 });
+
+test('agreed number of EMIs: interest only for those months, however late the repayment', async () => {
+  const { loanPosition } = await import('../../src/lib/loan.js');
+  // ₹50,000 on 10 Aug 2025, flat 0.5% a month = ₹250, from Sep 2025, EMI ₹5,250; nothing paid; today Oct 2026
+  const loan = { takenOn: new Date('2025-08-10T00:00:00Z'), principalPaise: 5000000, interestMethod: 'flat', rateBp: 50, ratePeriod: 'month', fixedInterestPaise: 0, interestFromMonth: 9, interestFromYear: 2025, installmentPaise: 525000, openingInterestPaise: 0 };
+  const oct2026 = 2026 * 12 + 9;
+  const capped = loanPosition({ ...loan, termMonths: 10 }, [], oct2026);
+  assert.equal(capped.interestChargedPaise, 250000, '10 EMIs → 10 × ₹250 = ₹2,500');
+  assert.equal(capped.totalOutstandingPaise, 5250000, '₹52,500');
+  assert.equal(capped.nextMonthInterestPaise, 0, 'no more interest after the 10th month');
+  const open = loanPosition({ ...loan, termMonths: null }, [], oct2026);
+  assert.equal(open.interestChargedPaise, 350000, 'no term: interest every month until repaid (14 × ₹250)');
+  const jun2026 = 2026 * 12 + 5;
+  assert.equal(loanPosition({ ...loan, termMonths: 10 }, [], jun2026).interestChargedPaise, 250000, 'by the 10th month (Jun 2026) all ₹2,500 is charged');
+});

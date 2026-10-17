@@ -76,6 +76,7 @@ loans.post('/calculator', async (req, res) => {
   const data = loanData({ ...body, takenOn: body.takenOn ?? todayIST(), openingInterestPaise: 0, note: null });
   const errors = checkLoanTerms(data);
   if (errors.length) throw new HttpError(400, errors[0], { errors });
+  if (body.months) data.termMonths = body.months;
   const emi = body.months ? emiFor(data, body.months) : null;
   const installment = emi ?? body.installmentPaise;
   if (!installment) throw new HttpError(400, 'months_or_installment');

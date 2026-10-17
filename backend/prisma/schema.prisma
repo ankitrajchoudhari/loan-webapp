@@ -120,6 +120,8 @@ model Loan {
   installmentPaise    Int            @default(0) @map("installment_paise")
   /// unpaid interest carried over from old (pre-system) records
   openingInterestPaise Int           @default(0) @map("opening_interest_paise")
+  /// agreed number of EMIs: interest is charged only for this many months (null = until repaid)
+  termMonths          Int?           @map("term_months")
   note                String?
   source              EntrySource    @default(entry)
   batchId             String?        @map("batch_id") @db.Uuid

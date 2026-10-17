@@ -69,7 +69,7 @@ async function eligibility(memberId) {
 
 /** EMI and month-by-month list for `amountPaise` over `months`, using the same maths as real loans. */
 function plan(terms, amountPaise, months) {
-  const loan = { ...terms, principalPaise: amountPaise, openingInterestPaise: 0 };
+  const loan = { ...terms, principalPaise: amountPaise, openingInterestPaise: 0, termMonths: months };
   const emi = emiFor(loan, months);
   const p = planNewLoan(loan, emi);
   return {
@@ -318,6 +318,7 @@ router.post('/:id/approve', async (req, res) => {
       ratePeriod: a.ratePeriod,
       fixedInterestPaise: a.fixedInterestPaise,
       installmentPaise: a.emiPaise,
+      termMonths: a.months,
       openingInterestPaise: 0,
       note: body.note ?? `ऑनलाइन आवेदन #${a.applicationNo} से (${a.months} महीने)`,
     });

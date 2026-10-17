@@ -25,6 +25,8 @@ export const loanTermFields = {
   interestFromYear: yearField.optional().or(z.literal('').transform(() => undefined)),
   installmentPaise: moneyField({ optional: true }).transform((v) => v ?? 0),
   openingInterestPaise: moneyField({ optional: true }).transform((v) => v ?? 0),
+  // agreed number of EMIs (interest only for these months); empty = interest until repaid
+  termMonths: z.coerce.number().int('term_invalid').min(1, 'term_invalid').max(600, 'term_invalid').optional().nullable().or(z.literal('').transform(() => null)),
   note: blankToNull(z.string().trim().max(500)),
 };
 
@@ -47,6 +49,7 @@ export function loanData(entry) {
     interestFromYear: from.year,
     installmentPaise: entry.installmentPaise ?? 0,
     openingInterestPaise: entry.openingInterestPaise ?? 0,
+    termMonths: entry.termMonths ?? null,
     note: entry.note ?? null,
   };
 }
@@ -77,6 +80,7 @@ export function loanRow(l) {
     interestFromYear: l.interestFromYear,
     installmentPaise: l.installmentPaise,
     openingInterestPaise: l.openingInterestPaise,
+    termMonths: l.termMonths,
     note: l.note,
     source: l.source,
     voided: Boolean(l.voidedAt),
