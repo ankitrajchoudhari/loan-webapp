@@ -6,6 +6,7 @@ import { Badge, Button, ButtonLink, Card, ErrorBox, Field, Input, Loading, Money
 import { Icon } from '@/components/icons';
 import { api } from '@/lib/api';
 import { fmtDateTime, money, rupeesText, toPaise } from '@/lib/format';
+import { LIVE_MS } from '@/lib/hooks';
 import { compressPhoto } from '@/lib/image';
 
 const STATUS_TONE = { initiated: 'warn', submitted: 'brand', confirmed: 'ok', rejected: 'bad', cancelled: 'neutral' };
@@ -21,18 +22,27 @@ export default function Pay() {
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const [s, h] = await Promise.all([api('/pay/summary'), api('/pay/history')]);
       setData(s);
       setHistory(h.payments);
       setError(null);
     } catch (e) {
-      setError(e);
+      if (silent !== true) setError(e); // a quiet refresh that fails keeps what is on screen
     }
   }, []);
   useEffect(() => {
     load();
+    const refresh = () => document.visibilityState === 'visible' && load(true);
+    const id = setInterval(refresh, LIVE_MS);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
   }, [load]);
 
   if (error) return <ErrorBox error={error} onRetry={load} />;

@@ -10,10 +10,6 @@ export default function LoginHelp() {
   const { t } = useTranslation();
   const [tab, setTab] = useState('active');
   const { data, error, loading, reload } = useApi('/help-requests', tab === 'active' ? { active: 1 } : { status: 'fixed' });
-  useEffect(() => {
-    const id = setInterval(reload, 15_000);
-    return () => clearInterval(id);
-  }, [reload]);
   return (
     <div className="space-y-4">
       <PageTitle title={t('help.adminTitle')} subtitle={t('help.adminSubtitle')} />

@@ -10,7 +10,7 @@ export default function Changes() {
   const { t } = useTranslation();
   const [offset, setOffset] = useState(0);
   const [entries, setEntries] = useState([]);
-  const { data, loading } = useApi('/audit-log', { limit: 30, offset });
+  const { data, loading } = useApi('/audit-log', { limit: 30, offset }, { live: offset === 0 });
   useEffect(() => {
     if (data) setEntries((e) => (offset === 0 ? data.entries : [...e, ...data.entries]));
   }, [data, offset]);

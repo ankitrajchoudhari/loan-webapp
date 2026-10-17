@@ -14,7 +14,7 @@ export default function NotificationBell() {
   const load = useCallback(() => api('/notifications').then(setData).catch(() => {}), []);
   useEffect(() => {
     load();
-    const id = setInterval(load, 60_000);
+    const id = setInterval(load, 20_000);
     return () => clearInterval(id);
   }, [load]);
 

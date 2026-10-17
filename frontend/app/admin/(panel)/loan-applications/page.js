@@ -13,10 +13,6 @@ export default function LoanApplications() {
   const { t } = useTranslation();
   const [tab, setTab] = useState('pending');
   const { data, error, loading, reload } = useApi('/loan-apply', { status: tab === 'all' ? '' : tab });
-  useEffect(() => {
-    const id = setInterval(reload, 30_000);
-    return () => clearInterval(id);
-  }, [reload]);
 
   return (
     <div className="space-y-4">

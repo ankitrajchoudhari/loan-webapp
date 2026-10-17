@@ -69,6 +69,10 @@ export async function api(path, { method = 'GET', body, query, raw = false, form
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, data.error?.code || 'server_error', data.error?.details);
   }
+  // something was saved: every screen that shows data refreshes at once (see useApi)
+  if (method !== 'GET' && !path.startsWith('/auth/') && typeof window !== 'undefined') {
+    setTimeout(() => window.dispatchEvent(new Event('samiti:changed')), 0);
+  }
   return raw ? res : res.json();
 }
 

@@ -24,10 +24,6 @@ export default function Payments() {
   const [confirm, setConfirm] = useState(null);
   const [reject, setReject] = useState(null);
 
-  useEffect(() => {
-    const id = setInterval(reload, 30_000); // new payments show up on their own
-    return () => clearInterval(id);
-  }, [reload]);
 
   const afterConfirm = (p) => {
     setConfirm(null);
