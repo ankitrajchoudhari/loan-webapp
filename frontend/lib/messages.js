@@ -1243,4 +1243,8 @@ export const messages = {
   "err.choose_account": ["इस नंबर पर कई खाते हैं — पहले अपना खाता चुनें।", "Several accounts use this number — choose your account first."],
   "members.sharedNumber": ["यह नंबर पहले से इनका भी है: {{names}}। दोनों खाते एक ही नंबर से जुड़ जाएँगे — लॉगिन पर सदस्य अपना खाता चुनेंगे।", "This number is already used by: {{names}}. The accounts will share it — at login the member picks their account."],
   "members.sameNumberAs": ["इसी नंबर पर दूसरे खाते:", "Other accounts on this number:"],
+  "pay.duesNow": ["आपका बकाया अब {{dues}} है, यह भुगतान {{amount}} का है।", "Your dues are now {{dues}}; this payment is for {{amount}}."],
+  "pay.changeAmount": ["रकम बदलें", "Change amount"],
+  "audit.payment_amount_updated": ["बकाया बदलने पर भुगतान की रकम अपने-आप ठीक हुई", "Payment amount updated to the new dues"],
+  "audit.payment_auto_cancelled": ["बकाया जमा हो चुका था, भुगतान अपने-आप रद्द", "Payment cancelled — dues already paid"],
 };

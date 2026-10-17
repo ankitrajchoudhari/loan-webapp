@@ -44,7 +44,7 @@ export default function Pay() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-maroon">{t('pay.title')}</h1>
       {open ? (
-        <OpenPayment payment={open} upi={data.upi} onChange={load} />
+        <OpenPayment key={`${open.id}-${open.amountPaise}`} payment={open} upi={data.upi} dues={data.dues} onChange={load} />
       ) : (
         <>
           {latest && ['confirmed', 'rejected'].includes(latest.status) && Date.now() - new Date(latest.confirmedAt ?? latest.createdAt).getTime() < 30 * 60 * 1000 && (
@@ -149,7 +149,7 @@ function NewPayment({ data, onCreated }) {
   );
 }
 
-function OpenPayment({ payment, upi, onChange }) {
+function OpenPayment({ payment, upi, dues, onChange }) {
   const { t } = useTranslation();
   const [p, setP] = useState(payment);
   const [utr, setUtr] = useState('');
@@ -206,6 +206,12 @@ function OpenPayment({ payment, upi, onChange }) {
           <Row label={t('pay.total')} value={money(p.totalPaise)} strong />
         </div>
 
+        {p.status === 'initiated' && dues && dues.payablePaise !== p.amountPaise && (
+          <Notice tone="brand" icon="alert">
+            {t('pay.duesNow', { dues: money(dues.payablePaise), amount: money(p.amountPaise) })}{' '}
+            <button type="button" onClick={cancel} className="font-semibold underline underline-offset-4">{t('pay.changeAmount')}</button>
+          </Notice>
+        )}
         {p.method === 'upi' && p.status === 'initiated' && upi && (
           <>
             <div className="grid items-center gap-4 sm:grid-cols-[auto_1fr]">

@@ -747,3 +747,38 @@ test('several accounts on one number: login lists them, the chosen account + its
   await admin('DELETE', `/members/${twin.data.member.id}`, { reason: 'गलती से', confirmName: 'जुड़वाँ' }, { expect: 200 });
   await admin('POST', '/members', { ...fam, fullName: 'नया', dateOfBirth: '2000-02-02' }, { expect: 201 }); // number still in use → not blocked
 });
+
+test('an unpaid payment follows the dues: admin enters an installment → the open payment amount drops; nothing due → cancelled', async () => {
+  const c = await admin('POST', '/members', { fullName: 'बकाया जाँच', mobileNumber: '9877777777', joinDate: dateIn(2, 1), dateOfBirth: '1981-01-01', monthlyInstallmentPaise: '1000' }, { expect: 201 });
+  const mid = c.data.member.id;
+  const m = agent();
+  await m('POST', '/auth/login', { mobile: '9877777777', dateOfBirth: '1981-01-01' }, { expect: 200 });
+  const s1 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  const due = s1.dues.payablePaise;
+  assert.ok(due >= 200000, 'at least two months due');
+  const p = await m('POST', '/pay', { method: 'upi', amountPaise: String(due / 100) }, { expect: 201 });
+
+  // the admin records the oldest month as paid in cash meanwhile
+  const oldest = s1.dues.installments[0];
+  await admin('POST', '/installments', { memberId: mid, month: oldest.month, year: oldest.year, amountPaise: '1000', paidOn: today, method: 'cash' }, { expect: 201 });
+  const s2 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  assert.equal(s2.dues.payablePaise, due - 100000);
+  assert.equal(s2.open[0].id, p.data.payment.id);
+  assert.equal(s2.open[0].amountPaise, due - 100000, 'open payment now asks for the new dues');
+  assert.equal(s2.open[0].totalPaise, due - 100000 + s2.feePaise);
+
+  // a member-typed amount is left alone
+  await m('POST', `/pay/${p.data.payment.id}/cancel`, {}, { expect: 200 });
+  const custom = await m('POST', '/pay', { method: 'upi', amountPaise: '500' }, { expect: 201 });
+  await admin('POST', '/installments', { memberId: mid, month: s1.dues.installments[1].month, year: s1.dues.installments[1].year, amountPaise: '1000', paidOn: today, method: 'cash' }, { expect: 201 });
+  assert.equal((await m('GET', `/pay/${custom.data.payment.id}`, undefined, { expect: 200 })).data.payment.amountPaise, 50000);
+  await m('POST', `/pay/${custom.data.payment.id}/cancel`, {}, { expect: 200 });
+
+  // everything paid by the admin → the open "all dues" payment is cancelled by itself
+  const rest = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  const all = await m('POST', '/pay', { method: 'upi', amountPaise: String(rest.dues.payablePaise / 100) }, { expect: 201 });
+  for (const i of rest.dues.installments) {
+    await admin('POST', '/installments', { memberId: mid, month: i.month, year: i.year, amountPaise: String(i.pendingPaise / 100), paidOn: today, method: 'cash' }, { expect: 201 });
+  }
+  assert.equal((await m('GET', `/pay/${all.data.payment.id}`, undefined, { expect: 200 })).data.payment.status, 'cancelled');
+});

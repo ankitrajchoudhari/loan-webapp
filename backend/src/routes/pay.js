@@ -41,7 +41,33 @@ function requireMember(req) {
 
 // --- Member ---------------------------------------------------------------------------------
 
+/**
+ * Dues can change while a payment is still open but no money has moved yet (an admin enters an
+ * installment, a loan is added, the fee changes …). Such a payment — UPI without a screenshot, or
+ * cash not yet collected — that was for "all my dues" is brought up to date; if nothing is due any
+ * more it is cancelled. A payment for an amount the member typed is left as it is.
+ */
+async function refreshOpenPayments(memberId) {
+  const open = await prisma.payment.findMany({ where: { memberId, OR: [{ method: 'upi', status: 'initiated' }, { method: 'cash', status: 'submitted', createdById: null }] } });
+  if (!open.length) return;
+  const member = await loadMemberForPay(prisma, memberId);
+  const dues = duesOf(member);
+  const fee = await memberFeePaise();
+  for (const p of open) {
+    const wasAllDues = p.dueSnapshot && p.amountPaise === p.dueSnapshot.payablePaise;
+    if (!wasAllDues) continue;
+    if (dues.payablePaise < 100) {
+      await prisma.payment.update({ where: { id: p.id }, data: { status: 'cancelled', rejectReason: 'बकाया पहले ही जमा हो गया' } });
+      await audit({ user: { role: 'system', name: 'system' } }, { action: 'payment_auto_cancelled', entity: 'payment', entityId: p.id, memberId, after: { paymentNo: p.paymentNo, reason: 'no_dues' } });
+    } else if (dues.payablePaise !== p.amountPaise || fee !== p.feePaise) {
+      await prisma.payment.update({ where: { id: p.id }, data: { amountPaise: dues.payablePaise, feePaise: fee, totalPaise: dues.payablePaise + fee, dueSnapshot: dues } });
+      await audit({ user: { role: 'system', name: 'system' } }, { action: 'payment_amount_updated', entity: 'payment', entityId: p.id, memberId, before: { amountPaise: p.amountPaise, feePaise: p.feePaise }, after: { amountPaise: dues.payablePaise, feePaise: fee } });
+    }
+  }
+}
+
 memberPay.get('/summary', async (req, res) => {
+  await refreshOpenPayments(requireMember(req));
   const member = await loadMemberForPay(prisma, requireMember(req));
   const upi = await upiConfig();
   const open = await prisma.payment.findMany({ where: { memberId: member.id, status: { in: ['initiated', 'submitted'] } }, orderBy: { createdAt: 'desc' } });
@@ -100,6 +126,7 @@ async function ownPayment(req) {
 }
 
 memberPay.get('/:id', async (req, res) => {
+  await refreshOpenPayments(requireMember(req));
   res.json({ payment: paymentView(await ownPayment(req)) });
 });
 
@@ -134,6 +161,8 @@ memberPay.post('/:id/cancel', async (req, res) => {
 // --- Staff ----------------------------------------------------------------------------------
 
 payments.get('/', async (req, res) => {
+  const stale = await prisma.payment.findMany({ where: { OR: [{ method: 'upi', status: 'initiated' }, { method: 'cash', status: 'submitted', createdById: null }] }, select: { memberId: true }, distinct: ['memberId'] });
+  for (const s of stale) await refreshOpenPayments(s.memberId);
   const status = ['initiated', 'submitted', 'confirmed', 'rejected', 'cancelled'].includes(req.query.status) ? req.query.status : undefined;
   const rows = await prisma.payment.findMany({
     where: { ...(status ? { status } : {}), ...(req.query.memberId ? { memberId: String(req.query.memberId) } : {}) },
@@ -188,6 +217,8 @@ export async function confirmPayment(req, p) {
 
 /** Money received (UPI seen in the bank / cash in hand) → apply it to dues. */
 payments.post('/:id/confirm', async (req, res) => {
+  const first = await prisma.payment.findUnique({ where: { id: req.params.id } });
+  if (first) await refreshOpenPayments(first.memberId);
   const p = await prisma.payment.findUnique({ where: { id: req.params.id } });
   if (!p) throw new HttpError(404, 'not_found');
   if (p.method === 'upi' && p.status !== 'submitted') throw new HttpError(400, 'payment_state');
