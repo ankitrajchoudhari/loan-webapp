@@ -126,6 +126,14 @@ function DevControls({ d, onChange }) {
     const r = await payee.run(() => api('/platform/payee', { method: 'PUT', body: f }), t('common.savedOk'));
     if (r) onChange(r);
   };
+  const removePayee = async () => {
+    if (!window.confirm(t('platform.removeQrConfirm'))) return;
+    const r = await payee.run(() => api('/platform/payee', { method: 'DELETE' }), t('platform.qrRemoved'));
+    if (r) {
+      setF({ upiId: '', payeeName: '', qrImage: '' });
+      onChange(r);
+    }
+  };
 
   return (
     <>
@@ -157,7 +165,13 @@ function DevControls({ d, onChange }) {
           <Field label={t('upi.qr')} hint={t('upi.qrHint')}>
             <div className="flex flex-wrap items-center gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {f.qrImage && <img src={f.qrImage} alt="QR" className="size-32 rounded-xl border border-line bg-white object-contain p-1" />}
+              {f.qrImage && (
+                <div className="relative">
+                  <img src={f.qrImage} alt="QR" className="size-32 rounded-xl border border-line bg-white object-contain p-1" />
+                  <button type="button" onClick={() => setF((s) => ({ ...s, qrImage: '' }))} aria-label={t('platform.removeQr')} title={t('platform.removeQr')}
+                    className="absolute -right-2 -top-2 grid size-8 place-items-center rounded-full bg-bad text-white shadow"><Icon name="x" className="size-4" /></button>
+                </div>
+              )}
               <input type="file" accept="image/png,image/jpeg,image/webp" onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
@@ -166,7 +180,10 @@ function DevControls({ d, onChange }) {
             </div>
           </Field>
           {payee.error && <ErrorBox error={payee.error} />}
-          <Button icon="check" loading={payee.busy} disabled={!f.upiId || !f.payeeName || !f.qrImage} onClick={savePayee}>{t('label.saveChanges')}</Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button icon="check" loading={payee.busy} disabled={!f.upiId || !f.payeeName || !f.qrImage} onClick={savePayee}>{t('label.saveChanges')}</Button>
+            {d.payee && <Button variant="danger" icon="trash" disabled={payee.busy} onClick={removePayee}>{t('platform.removeQr')}</Button>}
+          </div>
         </div>
       </Card>
     </>

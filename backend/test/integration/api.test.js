@@ -497,6 +497,9 @@ test('platform fee: developer switches it on, a bill is made when the month ends
   assert.equal(paid.data.bill.status, 'paid');
   assert.equal((await admin('GET', '/platform', undefined, { expect: 200 })).data.unpaidCount, 0);
 
+  await admin('DELETE', '/platform/payee', undefined, { expect: 403 });
+  const removed = await dev('DELETE', '/platform/payee', undefined, { expect: 200 });
+  assert.equal(removed.data.payee, null);
   const off = await dev('POST', '/platform/toggle', { on: false }, { expect: 200 });
   assert.equal(off.data.on, false);
 });

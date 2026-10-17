@@ -81,6 +81,16 @@ router.put('/payee', async (req, res) => {
   res.json(await overview());
 });
 
+/** Developer: remove the UPI id + QR (admins then see "no payment QR yet" until a new one is added). */
+router.delete('/payee', async (req, res) => {
+  requireDeveloper(req);
+  const db = liveDb();
+  const before = await payee();
+  await db.setting.deleteMany({ where: { key: 'platformPayee' } });
+  if (before) await audit(req, { action: 'platform_payee_removed', entity: 'settings', before: { upiId: before.upiId, payeeName: before.payeeName } }, db);
+  res.json(await overview());
+});
+
 async function findBill(id) {
   const b = await liveDb().platformBill.findUnique({ where: { id } });
   if (!b) throw new HttpError(404, 'not_found');

@@ -44,6 +44,28 @@ export function Emblem({ className = 'size-11' }) {
   );
 }
 
+/** Live date + time (India time), top corner on every screen. Drawn only in the browser, so no server/browser mismatch. */
+function LiveClock() {
+  const { i18n } = useTranslation();
+  const [now, setNow] = useState(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!now) return <span className="w-20 shrink-0" aria-hidden />;
+  const locale = i18n.language === 'en' ? 'en-IN' : 'hi-IN';
+  const opts = { timeZone: 'Asia/Kolkata' };
+  const time = now.toLocaleTimeString(locale, { ...opts, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const date = now.toLocaleDateString(locale, { ...opts, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return (
+    <time dateTime={now.toISOString()} className="shrink-0 text-right leading-tight" title={`${date} ${time}`}>
+      <span className="num block whitespace-nowrap text-sm font-bold text-maroon sm:text-base">{time}</span>
+      <span className="block whitespace-nowrap text-[0.7rem] text-muted sm:text-xs">{date}</span>
+    </time>
+  );
+}
+
 function BrandBar({ children, left }) {
   const { t } = useTranslation();
   return (
@@ -52,9 +74,10 @@ function BrandBar({ children, left }) {
         {left}
         <span className="hidden min-[400px]:block"><Emblem /></span>
         <div className="min-w-0 flex-1">
-          <div className="whitespace-nowrap font-brand text-lg leading-tight text-maroon sm:text-xl">{t('app.name')}</div>
+          <div className="truncate font-brand text-lg leading-tight text-maroon sm:text-xl">{t('app.name')}</div>
           <div className="hidden truncate text-sm text-muted sm:block">{t('app.tagline')}</div>
         </div>
+        <LiveClock />
         {children}
       </div>
     </header>

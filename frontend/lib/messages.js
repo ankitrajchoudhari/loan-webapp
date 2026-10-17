@@ -1156,4 +1156,8 @@ export const messages = {
   "audit.platform_bill_submitted": ["प्लेटफ़ॉर्म बिल का स्क्रीनशॉट भेजा", "Platform bill screenshot sent"],
   "audit.platform_bill_paid": ["प्लेटफ़ॉर्म बिल का भुगतान पक्का", "Platform bill paid"],
   "audit.platform_bill_rejected": ["प्लेटफ़ॉर्म बिल का भुगतान नहीं मिला", "Platform bill payment not received"],
+  "platform.removeQr": ["QR हटाएँ", "Remove QR"],
+  "platform.removeQrConfirm": ["क्या शुल्क लेने का UPI ID और QR हटाना है? नया लगाने तक व्यवस्थापक भुगतान नहीं कर पाएँगे।", "Remove the UPI id and QR for the fee? Admins can't pay until you add a new one."],
+  "platform.qrRemoved": ["QR हटा दिया गया", "QR removed"],
+  "audit.platform_payee_removed": ["प्लेटफ़ॉर्म शुल्क का QR हटाया", "Platform fee QR removed"],
 };
