@@ -15,8 +15,7 @@ for (const url of [live, practice]) {
   }
 }
 
-const env = { ...process.env, DATABASE_URL: live, TEST_DATABASE_URL: practice, NODE_ENV: 'test', ADMIN_SECRET_CODE: '0100', FIREBASE_PROJECT_ID: 'jaipur-comitte', ADMIN_ALLOWED: '',
-  RAZORPAY_KEY_ID: 'rzp_test_ci', RAZORPAY_KEY_SECRET: 'ci_secret', RAZORPAY_WEBHOOK_SECRET: 'ci_whsec', RAZORPAY_FAKE_ORDERS: '1' };
+const env = { ...process.env, DATABASE_URL: live, TEST_DATABASE_URL: practice, NODE_ENV: 'test', ADMIN_SECRET_CODE: '0100', FIREBASE_PROJECT_ID: 'jaipur-comitte', ADMIN_ALLOWED: '' };
 if (!process.argv.includes('--skip-migrate')) {
   for (const url of [live, practice]) execSync('npx prisma migrate deploy', { stdio: 'inherit', env: { ...env, DATABASE_URL: url } });
 }

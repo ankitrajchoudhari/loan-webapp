@@ -4,6 +4,16 @@
 // Both libraries are loaded only when someone presses "download".
 
 export async function downloadPdf(el, filename) {
+  (await makePdf(el)).save(`${safeName(filename)}.pdf`);
+}
+
+/** The PDF as a File, e.g. to share to WhatsApp from a phone. */
+export async function pdfFile(el, filename) {
+  const blob = (await makePdf(el)).output('blob');
+  return new File([blob], `${safeName(filename)}.pdf`, { type: 'application/pdf' });
+}
+
+async function makePdf(el) {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas-pro'), import('jspdf')]);
   const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -19,7 +29,7 @@ export async function downloadPdf(el, filename) {
     if (page) pdf.addPage();
     pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, width, (h * width) / canvas.width);
   }
-  pdf.save(`${safeName(filename)}.pdf`);
+  return pdf;
 }
 
 /** Prints only the given element (everything else on the page is hidden while printing). */

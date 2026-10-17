@@ -26,7 +26,8 @@ export function client(env = 'live') {
   if (env === 'test' && !testEnvAvailable()) throw new Error('Practice database is not configured');
   if (!clients[env]) {
     const url = env === 'test' ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;
-    clients[env] = new PrismaClient({ datasources: { db: { url } } });
+    // screenshots are loaded only where asked for (omit: { screenshot: false }), never in lists
+    clients[env] = new PrismaClient({ datasources: { db: { url } }, omit: { payment: { screenshot: true }, platformBill: { screenshot: true } } });
   }
   return clients[env];
 }

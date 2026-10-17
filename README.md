@@ -106,25 +106,24 @@ npm run check:i18n  # every text on screen exists in Hindi and English
 
 ---
 
-## Online payments with Razorpay (automatic confirmation)
+## Payments (UPI with screenshot, or cash)
 
-Without Razorpay keys, members pay by plain UPI (QR) or cash, and staff confirm each payment.
-With keys, a third button **"ऑनलाइन भुगतान करें"** appears and those payments confirm themselves.
+- The admin sets the samiti's **UPI id + QR** (Settings → UPI). Members see their dues, pay with any UPI app,
+  and **upload the payment screenshot** (the UTR number is optional). The same screenshot or UTR can't be used twice.
+- Staff open **Payments**, look at the screenshot, check the bank / UPI app, then **confirm** (dues are cleared
+  oldest first, extra becomes advance) or mark **not received** (the member sees why).
+- Every confirmed payment has a receipt: **print**, **download PDF**, or **send** (WhatsApp / any app on a phone).
+- Cash: record it at the counter on the Payments page; the receipt opens for printing.
+- There is no extra charge on members' payments.
 
-1. Create an account at https://razorpay.com and finish KYC (needed for real money; test mode works at once).
-2. Dashboard → **Account & Settings → API Keys → Generate key**. Put them in `backend/.env`:
-   `RAZORPAY_KEY_ID=rzp_test_…` and `RAZORPAY_KEY_SECRET=…` (test keys first; swap for `rzp_live_…` keys when going live).
-3. Dashboard → **Account & Settings → Payment capture**: keep **automatic capture** on.
-4. Dashboard → **Webhooks → Add new webhook** (needs the site on a public HTTPS address, not localhost):
-   URL `https://<your-site>/api/v1/webhooks/razorpay`, a secret of your choice, events
-   **payment.captured**, **payment.failed**, **order.paid**. Put the same secret in `RAZORPAY_WEBHOOK_SECRET`.
-5. Restart the backend. Try a test payment with Razorpay's test UPI id `success@razorpay` (and `failure@razorpay` to see the failure path).
+## Platform fee (developer ↔ samiti)
 
-How it stays safe: the server creates the order for the exact total; Razorpay returns a signature that only Razorpay and this
-server can produce (HMAC with your key secret), so a payment is confirmed only when the signature checks out. The webhook is a
-second, independent confirmation (also signed) for when the member's phone closes mid-payment. Both paths can arrive together;
-a database lock makes sure the money is applied exactly once. Razorpay's own charges (about 2% on UPI/cards, set by Razorpay)
-come out of your settlement; they are separate from the ₹12.45 platform fee recorded on each payment.
+- Only the **developer** can switch it on: **Platform bill → "Platform fee on"**, with the fee per day (default ₹12.45).
+  Charging starts from that exact moment; switching off stops it (days up to then stay billed).
+- Each calendar day (India time) on which it was on is charged once. When a month ends, a bill is made:
+  **days × fee per day** (e.g. a full 31-day month = 31 × ₹12.45 = ₹385.95). The current month's running total is shown with date and time.
+- The developer adds their own **UPI id + QR**. The admin gets a notification and a **pop-up with the QR**; they pay,
+  **upload the screenshot**, and the developer marks it **paid** (or "not received" with a reason, then the admin pays again).
 
 ## Going live (production)
 

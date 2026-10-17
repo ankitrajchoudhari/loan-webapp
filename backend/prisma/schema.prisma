@@ -346,6 +346,10 @@ model Payment {
   rejectReason  String?   @map("reject_reason")
   submittedAt   DateTime? @map("submitted_at")
   receiptPrintedAt DateTime? @map("receipt_printed_at")
+  /// screenshot of the UPI payment, uploaded by the member; hash stops the same picture being used twice
+  screenshot     Bytes?
+  screenshotType String?   @map("screenshot_type") @db.VarChar(30)
+  screenshotHash String?   @map("screenshot_hash") @db.VarChar(64)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -353,6 +357,7 @@ model Payment {
 
   @@index([status, createdAt])
   @@index([memberId, createdAt])
+  @@index([screenshotHash])
   @@map("payments")
 }
 
@@ -422,4 +427,45 @@ model LoanDocument {
 
   @@unique([applicationId, kind])
   @@map("loan_documents")
+}
+
+/// Platform fee (developer ↔ samiti), live database only. Each switch-on of "charge platform fee" is one period.
+model PlatformFeePeriod {
+  id          String    @id @default(uuid()) @db.Uuid
+  startedAt   DateTime  @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  /// fee per day, in paise (₹12.45 = 1245)
+  ratePaise   Int       @map("rate_paise")
+  startedById String?   @map("started_by_id") @db.Uuid
+  endedById   String?   @map("ended_by_id") @db.Uuid
+
+  @@map("platform_fee_periods")
+}
+
+/// Monthly platform bill = days the fee was on in that month × rate per day. Made when the month ends.
+model PlatformBill {
+  id             String    @id @default(uuid()) @db.Uuid
+  billNo         Int       @unique @map("bill_no")
+  month          Int
+  year           Int
+  days           Int
+  amountPaise    Int       @map("amount_paise")
+  /// [{ ratePaise, days, from, to }]
+  breakdown      Json      @default("[]")
+  /// due → submitted (admin uploaded the payment screenshot) → paid (developer confirmed) | rejected
+  status         String    @default("due") @db.VarChar(12)
+  generatedAt    DateTime  @default(now()) @map("generated_at")
+  screenshot     Bytes?
+  screenshotType String?   @map("screenshot_type") @db.VarChar(30)
+  screenshotHash String?   @map("screenshot_hash") @db.VarChar(64)
+  utr            String?   @db.VarChar(40)
+  submittedAt    DateTime? @map("submitted_at")
+  submittedById  String?   @map("submitted_by_id") @db.Uuid
+  paidAt         DateTime? @map("paid_at")
+  confirmedById  String?   @map("confirmed_by_id") @db.Uuid
+  rejectReason   String?   @map("reject_reason")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([year, month])
+  @@map("platform_bills")
 }

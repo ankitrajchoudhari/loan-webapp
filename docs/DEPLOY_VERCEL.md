@@ -40,8 +40,6 @@ The browser only ever talks to the website. The website passes `/api/v1/*` on to
 | `APP_ORIGIN` | the website address from step 3, e.g. `https://samiti.vercel.app` (fill in after step 3) |
 | `FIREBASE_PROJECT_ID` | `jaipur-comitte` |
 | `DEVELOPER_NAME`, `DEVELOPER_MOBILE`, `DEVELOPER_DOB`, `DEVELOPER_EMAIL` | your developer account (created on the first request) |
-| `PLATFORM_FEE_PAISE` | `1245` |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | from the Razorpay dashboard (test keys first) |
 
 4. **Deploy**. Then open `https://<api-project>.vercel.app/health` — it should show `{"ok":true}`.
 
@@ -59,9 +57,7 @@ The browser only ever talks to the website. The website passes `/api/v1/*` on to
    (comma-separate several, e.g. `https://samiti.vercel.app,https://hisab.example.in`) → **Deployments → Redeploy**.
    Changes from any other address are refused, so preview links (`…-git-…vercel.app`) can't save anything — use the main address.
 2. **Firebase** console → Authentication → Settings → **Authorised domains** → add the website domain.
-3. **Razorpay** → Webhooks → URL `https://<website>/api/v1/webhooks/razorpay`, events `payment.captured`, `payment.failed`, `order.paid`,
-   secret = `RAZORPAY_WEBHOOK_SECRET`.
-4. Own domain (optional): website project → Settings → Domains. Add it to `APP_ORIGIN` and Firebase too.
+3. Own domain (optional): website project → Settings → Domains. Add it to `APP_ORIGIN` and Firebase too.
 
 ## 5. First login
 

@@ -1,10 +1,9 @@
-// Member payments: what is due, the platform fee, and how a confirmed payment is applied.
+// Member payments: what is due, and how a confirmed payment is applied.
 //
 // Order of application (oldest money owed first, like a bank):
 //   1. unpaid / part-paid samiti installments, oldest month first
 //   2. loan dues (this month's + overdue installment), interest first, then principal
 //   3. anything left over → the member's advance credit (used first on the next payment)
-// The platform fee is recorded on the payment only; it never touches the samiti's books.
 import { prisma } from './db.js';
 import { HttpError, ym, iso, todayIST, currentMonthYear, parseDate } from './util.js';
 import { installmentArrears, publicMember } from './ledger.js';
@@ -12,11 +11,6 @@ import { loanInsights, suggestSplit } from './loan.js';
 import { createInstallment } from './installments.js';
 import { createRepayment } from './loans.js';
 import { audit } from './audit.js';
-
-export const platformFeePaise = () => {
-  const v = Number(process.env.PLATFORM_FEE_PAISE ?? 1245); // ₹12.45 per transaction
-  return Number.isInteger(v) && v >= 0 ? v : 1245;
-};
 
 const LIVE = { voidedAt: null };
 
@@ -72,9 +66,8 @@ export function paymentView(p, { names } = {}) {
     upiId: p.upiId,
     dueSnapshot: p.dueSnapshot,
     allocation: p.allocation,
-    confirmedBy: p.gateway ? { name: 'Razorpay (ऑनलाइन)', role: 'system' } : p.confirmedById && names ? names.get(p.confirmedById) ?? null : undefined,
-    gateway: p.gateway ?? null,
-    gatewayPaymentId: p.gatewayPaymentId ?? null,
+    confirmedBy: p.confirmedById && names ? names.get(p.confirmedById) ?? null : undefined,
+    hasScreenshot: Boolean(p.screenshotHash),
     confirmedAt: p.confirmedAt,
     rejectReason: p.rejectReason,
     submittedAt: p.submittedAt,

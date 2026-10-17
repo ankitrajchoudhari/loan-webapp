@@ -137,6 +137,7 @@ const ADMIN_NAV = [
   ['/admin/history', 'history', 'nav.history', 'history'],
   ['/admin/reports', 'chart', 'nav.reports', 'reports'],
   ['/admin/team', 'shield', 'nav.team', 'manager'],
+  ['/admin/platform', 'receipt', 'nav.platform', 'manager'],
   ['/admin/support', 'message', 'nav.support', null],
   ['/admin/settings', 'settings', 'nav.settings', 'manager'],
 ];

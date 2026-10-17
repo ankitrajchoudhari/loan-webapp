@@ -3,9 +3,8 @@
 //   staff  : /payments      — confirm (money received) or reject, record cash at the counter, receipts
 //   admin  : /upi-settings  — the one UPI id + QR shown to members (only an admin may change it)
 //
-// Plain UPI (id + QR) cannot tell a website whether money arrived, so a UPI payment is confirmed by
-// staff after checking the bank/UPI app. A gateway (e.g. Razorpay) can later call confirmPayment()
-// itself from its webhook — nothing else changes.
+// Plain UPI (id + QR) cannot tell a website whether money arrived, so the member uploads a screenshot
+// of the payment and staff confirm it after checking the bank/UPI app. Then a receipt is printed or sent.
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma, liveDb } from '../lib/db.js';
@@ -14,9 +13,9 @@ import { audit } from '../lib/audit.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
 import { SUPPORT_NAME, notifyStaffWith } from '../lib/notify.js';
 import { publicMember } from '../lib/ledger.js';
-import { platformFeePaise, loadMemberForPay, duesOf, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
-import { razorpayEnabled, razorpayKeyId, createOrder, checkoutSignatureOk } from '../lib/razorpay.js';
-import { currentEnv } from '../lib/db.js';
+import { loadMemberForPay, duesOf, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
+import { decodePhoto } from '../lib/kyc.js';
+import { screenshotHash } from '../lib/platform.js';
 
 export const memberPay = Router();
 export const payments = Router();
@@ -49,8 +48,6 @@ memberPay.get('/summary', async (req, res) => {
   res.json({
     member: publicMember(member),
     dues: duesOf(member),
-    feePaise: platformFeePaise(),
-    online: razorpayEnabled(),
     upi: upi ? { upiId: upi.upiId, payeeName: upi.payeeName, qrImage: upi.qrImage } : null,
     open: open.map((p) => paymentView(p)),
   });
@@ -70,16 +67,15 @@ memberPay.post('/', async (req, res) => {
   // one open request at a time keeps things simple for members and staff
   const open = await prisma.payment.findFirst({ where: { memberId, status: { in: ['initiated', 'submitted'] } } });
   if (open) throw new HttpError(409, 'payment_open', { paymentId: open.id });
-  const fee = platformFeePaise();
   const p = await prisma.payment.create({
     data: {
       paymentNo: await nextPaymentNo(prisma),
       memberId,
       method: body.method,
       amountPaise: body.amountPaise,
-      feePaise: fee,
-      totalPaise: body.amountPaise + fee,
-      // cash waits for the admin; UPI waits for the member's transaction id
+      feePaise: 0,
+      totalPaise: body.amountPaise,
+      // cash waits for the admin; UPI waits for the member's screenshot
       status: body.method === 'cash' ? 'submitted' : 'initiated',
       submittedAt: body.method === 'cash' ? new Date() : null,
       upiId: body.method === 'upi' ? upi.upiId : null,
@@ -94,82 +90,6 @@ memberPay.post('/', async (req, res) => {
   res.status(201).json({ payment: paymentView(p), upi: body.method === 'upi' ? { upiId: upi.upiId, payeeName: upi.payeeName } : null });
 });
 
-// --- Member: online payment through Razorpay (confirmed automatically) -----------------------
-
-export const GATEWAY_ACTOR = { user: { role: 'system', name: 'Razorpay' } };
-
-/** Starts an online payment: creates the payment + a Razorpay order for the exact total. */
-memberPay.post('/online', async (req, res) => {
-  const memberId = requireMember(req);
-  if (!razorpayEnabled()) throw new HttpError(400, 'online_not_set');
-  const body = validate(z.object({ amountPaise: moneyField({ min: 100, max: 100_000_000 }) }), req.body);
-  const member = await loadMemberForPay(prisma, memberId);
-  // an unfinished online attempt is simply replaced; a UPI/cash one still waiting must be finished first
-  await prisma.payment.updateMany({ where: { memberId, method: 'online', status: 'initiated' }, data: { status: 'cancelled' } });
-  const open = await prisma.payment.findFirst({ where: { memberId, status: { in: ['initiated', 'submitted'] } } });
-  if (open) throw new HttpError(409, 'payment_open', { paymentId: open.id });
-  const fee = platformFeePaise();
-  const paymentNo = await nextPaymentNo(prisma);
-  const order = await createOrder({
-    totalPaise: body.amountPaise + fee,
-    receipt: `samiti-${currentEnv()}-${paymentNo}`,
-    notes: { env: currentEnv(), memberNo: String(member.memberNo), paymentNo: String(paymentNo) },
-  });
-  const p = await prisma.payment.create({
-    data: {
-      paymentNo, memberId, method: 'online', amountPaise: body.amountPaise, feePaise: fee, totalPaise: body.amountPaise + fee,
-      status: 'initiated', gateway: 'razorpay', gatewayOrderId: order.id, dueSnapshot: duesOf(member),
-    },
-  });
-  await audit(req, { action: 'payment_started', entity: 'payment', entityId: p.id, memberId, after: { paymentNo, method: 'online', totalPaise: p.totalPaise, orderId: order.id } });
-  res.status(201).json({
-    payment: paymentView(p),
-    checkout: {
-      key: razorpayKeyId(), orderId: order.id, amount: p.totalPaise, currency: 'INR',
-      name: 'श्री श्याम सेवा समिति', description: `भुगतान #${paymentNo}`,
-      prefill: { name: member.fullName, contact: `+91${member.mobileNumber}` },
-    },
-  });
-});
-
-/** Checkout success: verify Razorpay's signature, then confirm and apply automatically. */
-memberPay.post('/:id/online-verify', async (req, res) => {
-  const body = validate(z.object({
-    razorpay_order_id: z.string().min(5), razorpay_payment_id: z.string().min(5), razorpay_signature: z.string().min(10),
-  }), req.body);
-  const p = await ownPayment(req);
-  if (p.method !== 'online' || p.gatewayOrderId !== body.razorpay_order_id) throw new HttpError(400, 'payment_state');
-  if (!checkoutSignatureOk({ orderId: body.razorpay_order_id, paymentId: body.razorpay_payment_id, signature: body.razorpay_signature })) {
-    throw new HttpError(400, 'online_signature_bad');
-  }
-  const done = await settleOnline(p, body.razorpay_payment_id);
-  res.json({ payment: paymentView(done, { names: new Map() }) });
-});
-
-/** Checkout reported a failure (or the member closed it). */
-memberPay.post('/:id/online-failed', async (req, res) => {
-  const body = validate(z.object({ reason: z.string().trim().max(300).optional() }), req.body);
-  const p = await ownPayment(req);
-  if (p.method !== 'online' || p.status !== 'initiated') return res.json({ payment: paymentView(p) });
-  const u = await prisma.payment.update({ where: { id: p.id }, data: { status: 'rejected', rejectReason: body.reason || 'ऑनलाइन भुगतान पूरा नहीं हुआ' } });
-  res.json({ payment: paymentView(u) });
-});
-
-/** Marks an online payment paid and applies it — safe to call twice (checkout + webhook). */
-export async function settleOnline(p, gatewayPaymentId) {
-  const fresh = await prisma.payment.findUnique({ where: { id: p.id } });
-  if (fresh.status === 'confirmed') return fresh;
-  await prisma.payment.update({ where: { id: p.id }, data: { gatewayPaymentId, submittedAt: fresh.submittedAt ?? new Date(), status: 'submitted' } });
-  try {
-    return await confirmPayment(GATEWAY_ACTOR, { ...fresh, status: 'submitted' });
-  } catch (err) {
-    // the other path (checkout or webhook) confirmed it a moment earlier
-    const again = await prisma.payment.findUnique({ where: { id: p.id } });
-    if (again.status === 'confirmed') return again;
-    throw err;
-  }
-}
-
 async function ownPayment(req) {
   const p = await prisma.payment.findUnique({ where: { id: req.params.id } });
   if (!p || p.memberId !== requireMember(req)) throw new HttpError(404, 'not_found');
@@ -180,16 +100,24 @@ memberPay.get('/:id', async (req, res) => {
   res.json({ payment: paymentView(await ownPayment(req)) });
 });
 
-/** Member says "I have paid" and gives the 12-digit UPI transaction id (UTR). */
+/** Member says "I have paid": screenshot of the payment (needed) and the 12-digit UPI transaction id (UTR, if they have it). */
 memberPay.post('/:id/submit', async (req, res) => {
-  const body = validate(z.object({ utr: z.string().trim().regex(/^\d{12}$/, 'utr_invalid') }), req.body);
+  const body = validate(z.object({
+    screenshot: z.string().min(100, 'screenshot_required'),
+    utr: blankToNull(z.string().trim().regex(/^\d{12}$/, 'utr_invalid')),
+  }), req.body);
   const p = await ownPayment(req);
-  if (p.method !== 'upi' || p.status !== 'initiated') throw new HttpError(400, 'payment_state');
-  const used = await prisma.payment.findFirst({ where: { utr: body.utr, status: { in: ['submitted', 'confirmed'] } } });
-  if (used) throw new HttpError(409, 'utr_used');
-  const u = await prisma.payment.update({ where: { id: p.id }, data: { utr: body.utr, status: 'submitted', submittedAt: new Date() } });
-  await audit(req, { action: 'payment_submitted', entity: 'payment', entityId: p.id, memberId: p.memberId, after: { paymentNo: p.paymentNo, utr: body.utr } });
-  await notifyStaffWith('payments', { title: `📲 UPI भुगतान #${p.paymentNo} जाँचें`, body: `₹${(p.totalPaise / 100).toFixed(2)} · UTR ${body.utr} — बैंक/UPI ऐप में देखकर पक्का करें।`, link: '/admin/payments' }).catch(() => {});
+  if (p.method !== 'upi' || !['initiated', 'rejected'].includes(p.status)) throw new HttpError(400, 'payment_state');
+  const shot = decodePhoto(body.screenshot);
+  const hash = screenshotHash(shot.buf);
+  if (body.utr && await prisma.payment.findFirst({ where: { utr: body.utr, status: { in: ['submitted', 'confirmed'] }, id: { not: p.id } } })) throw new HttpError(409, 'utr_used');
+  if (await prisma.payment.findFirst({ where: { screenshotHash: hash, status: { in: ['submitted', 'confirmed'] }, id: { not: p.id } } })) throw new HttpError(409, 'screenshot_used');
+  const u = await prisma.payment.update({
+    where: { id: p.id },
+    data: { utr: body.utr, screenshot: shot.buf, screenshotType: shot.type, screenshotHash: hash, status: 'submitted', submittedAt: new Date(), rejectReason: null },
+  });
+  await audit(req, { action: 'payment_submitted', entity: 'payment', entityId: p.id, memberId: p.memberId, after: { paymentNo: p.paymentNo, utr: body.utr, screenshot: true } });
+  await notifyStaffWith('payments', { title: `📲 UPI भुगतान #${p.paymentNo} जाँचें`, body: `₹${(p.totalPaise / 100).toFixed(2)}${body.utr ? ` · UTR ${body.utr}` : ''} — स्क्रीनशॉट और बैंक/UPI ऐप देखकर पक्का करें।`, link: '/admin/payments' }).catch(() => {});
   res.json({ payment: paymentView(u) });
 });
 
@@ -223,13 +151,13 @@ payments.get('/', async (req, res) => {
 /** Dues for one member (counter screen). */
 payments.get('/due/:memberId', async (req, res) => {
   const member = await loadMemberForPay(prisma, req.params.memberId);
-  res.json({ member: publicMember(member), dues: duesOf(member), feePaise: platformFeePaise() });
+  res.json({ member: publicMember(member), dues: duesOf(member) });
 });
 
-/** Applies a payment to dues. `req.user` is the confirming staff member, or a system actor (gateway). */
+/** Applies a payment to dues. `req.user` is the confirming staff member. */
 export async function confirmPayment(req, p) {
   const result = await prisma.$transaction(async (tx) => {
-    // lock the row: two confirmations at once (admin double-click, checkout + webhook) apply only once
+    // lock the row: two confirmations at once (e.g. a double-click) apply only once
     await tx.$queryRaw`SELECT id FROM payments WHERE id = ${p.id}::uuid FOR UPDATE`;
     const fresh = await tx.payment.findUnique({ where: { id: p.id } });
     if (fresh.status !== 'submitted' && fresh.status !== 'initiated') throw new HttpError(400, 'payment_state');
@@ -268,11 +196,10 @@ payments.post('/:id/reject', async (req, res) => {
 payments.post('/cash', async (req, res) => {
   const body = validate(z.object({ memberId: z.string().uuid('member_required'), amountPaise: moneyField({ min: 100, max: 100_000_000 }), note: blankToNull(z.string().max(300)) }), req.body);
   const member = await loadMemberForPay(prisma, body.memberId);
-  const fee = platformFeePaise();
   const p = await prisma.payment.create({
     data: {
-      paymentNo: await nextPaymentNo(prisma), memberId: member.id, method: 'cash', amountPaise: body.amountPaise, feePaise: fee,
-      totalPaise: body.amountPaise + fee, status: 'submitted', submittedAt: new Date(), dueSnapshot: duesOf(member), createdById: req.user.id,
+      paymentNo: await nextPaymentNo(prisma), memberId: member.id, method: 'cash', amountPaise: body.amountPaise, feePaise: 0,
+      totalPaise: body.amountPaise, status: 'submitted', submittedAt: new Date(), dueSnapshot: duesOf(member), createdById: req.user.id,
     },
   });
   const u = await confirmPayment(req, p);
@@ -294,6 +221,14 @@ receipts.get('/:id', async (req, res) => {
   if (req.user.role === 'member' && p.memberId !== req.user.id) throw new HttpError(404, 'not_found');
   if (p.status !== 'confirmed') throw new HttpError(400, 'payment_state');
   res.json({ payment: paymentView(p, { names: await staffNames(req.user) }) });
+});
+
+/** The member's payment screenshot: the member themselves, or staff. */
+receipts.get('/:id/screenshot', async (req, res) => {
+  const p = await prisma.payment.findUnique({ where: { id: req.params.id }, omit: { screenshot: false } });
+  if (!p || !p.screenshot || (req.user.role === 'member' && p.memberId !== req.user.id)) throw new HttpError(404, 'not_found');
+  res.set({ 'Content-Type': p.screenshotType, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+  res.send(Buffer.from(p.screenshot));
 });
 
 // --- UPI settings (one UPI id + QR; only an admin may change it) ------------------------------------

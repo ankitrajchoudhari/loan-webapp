@@ -74,12 +74,11 @@ export default function Payments() {
                 <Badge tone={TONE[p.status]} className="ml-auto">{t(`payStatus.${p.status}`)}</Badge>
               </div>
               <div className="num mt-1 text-sm text-muted">
-                {p.method === 'online' ? `${t('pay.onlineShort')}${p.gatewayPaymentId ? ` · ${p.gatewayPaymentId}` : ''}` : p.method === 'upi' ? `UPI${p.utr ? ` · UTR ${p.utr}` : ''}` : t('pay.cash')} · {fmtDateTime(p.submittedAt ?? p.createdAt)}
+                {p.method === 'upi' ? `UPI${p.utr ? ` · UTR ${p.utr}` : ''}` : t('pay.cash')} · {fmtDateTime(p.submittedAt ?? p.createdAt)}
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-4 text-sm">
-                <span>{t('pay.toSamiti')}: <b className="num">{money(p.amountPaise)}</b></span>
-                <span>{t('pay.fee')}: <b className="num">{money(p.feePaise)}</b></span>
-                <span>{t('pay.total')}: <b className="num">{money(p.totalPaise)}</b></span>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <span>{t('pay.total')}: <b className="num text-base">{money(p.totalPaise)}</b></span>
+                {p.hasScreenshot && <ShotThumb id={p.id} />}
               </div>
               {p.rejectReason && <div className="mt-1 text-sm text-bad">{p.rejectReason}</div>}
               {p.status === 'submitted' && (
@@ -128,11 +127,13 @@ function ConfirmModal({ p, onClose, onDone }) {
       footer={<><Button variant="secondary" size="md" onClick={onClose}>{t('common.cancel')}</Button><Button variant="success" size="md" icon="check" loading={busy} onClick={go}>{t('payAdmin.yesReceived')}</Button></>}>
       <div className="space-y-3">
         <Notice tone="brand" icon="shield">
-          {p.method === 'upi' ? t('payAdmin.checkUpi', { amount: money(p.totalPaise), utr: p.utr }) : t('payAdmin.checkCash', { amount: money(p.totalPaise) })}
+          {p.method === 'upi' ? t('payAdmin.checkUpiShot', { amount: money(p.totalPaise), utr: p.utr ? ` · UTR ${p.utr}` : '' }) : t('payAdmin.checkCash', { amount: money(p.totalPaise) })}
         </Notice>
+        {p.hasScreenshot && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={`/api/v1/receipts/${p.id}/screenshot`} alt={t('pay.shotTitle')} className="mx-auto max-h-[45vh] rounded-xl border border-line" />
+        )}
         <Row label={t('field.memberName')} value={p.member?.fullName} />
-        <Row label={t('pay.toSamiti')} value={money(p.amountPaise)} />
-        <Row label={t('pay.fee')} value={money(p.feePaise)} />
         <Row label={t('pay.total')} value={money(p.totalPaise)} strong />
         <p className="text-sm text-muted">{t('payAdmin.applyNote')}</p>
         {error && <ErrorBox error={error} />}
@@ -178,8 +179,7 @@ function CashCounter({ onDone }) {
             </div>
             <Field label={t('pay.amount')} hint={t('pay.amountHint')}><MoneyInput value={amount} onChange={setAmount} /></Field>
             <div className="rounded-xl bg-stone-50 px-3 py-2">
-              <Row label={t('pay.fee')} value={money(due.feePaise)} />
-              <Row label={t('payAdmin.collect')} value={money(amt + due.feePaise)} strong />
+              <Row label={t('payAdmin.collect')} value={money(amt)} strong />
             </div>
             {error && <ErrorBox error={error} />}
             <Button full icon="check" loading={busy} disabled={amt < 100} onClick={save}>{t('payAdmin.saveAndPrint')}</Button>
@@ -187,5 +187,25 @@ function CashCounter({ onDone }) {
         )}
       </div>
     </Card>
+  );
+}
+
+/** Small picture of the member's payment screenshot; tap to see it full size. */
+function ShotThumb({ id }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const src = `/api/v1/receipts/${id}/screenshot`;
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="flex items-center gap-2 rounded-lg border border-line bg-stone-50 p-1 pr-3 font-semibold text-maroon hover:bg-brand-50">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="h-12 w-9 rounded object-cover" loading="lazy" />
+        {t('pay.seeShot')}
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title={t('pay.shotTitle')} wide>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={t('pay.shotTitle')} className="mx-auto max-h-[75vh] rounded-xl" />
+      </Modal>
+    </>
   );
 }

@@ -39,7 +39,7 @@ function agent() {
   };
 }
 
-const TABLES = ['payments', 'history_rows', 'history_batches', 'loan_repayments', 'loans', 'installments', 'members', 'otp_tokens', 'audit_log', 'settings', 'admin_users', 'revoked_tokens', 'support_tickets', 'notifications', 'deleted_mobiles', 'loan_applications'];
+const TABLES = ['payments', 'history_rows', 'history_batches', 'loan_repayments', 'loans', 'installments', 'members', 'otp_tokens', 'audit_log', 'settings', 'admin_users', 'revoked_tokens', 'support_tickets', 'notifications', 'deleted_mobiles', 'loan_applications', 'platform_fee_periods', 'platform_bills'];
 
 before(async () => {
   for (const env of ['live', 'test']) await client(env).$executeRawUnsafe(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(',')} CASCADE`);
@@ -384,7 +384,7 @@ test('bank maths: calculator EMI + schedule, loan insights, dashboard money posi
 });
 
 
-test('payments: admin sets UPI; member pays by UPI with UTR; confirm applies dues oldest-first, extra becomes advance; reject; cash + receipt', async () => {
+test('payments: admin sets UPI; member pays by UPI with screenshot; confirm applies dues oldest-first, extra becomes advance; reject; cash + receipt', async () => {
   const qr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   const dev = agent();
   await dev('POST', '/auth/login', DEV, { expect: 200 });
@@ -397,7 +397,7 @@ test('payments: admin sets UPI; member pays by UPI with UTR; confirm applies due
   const m = agent();
   await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
   const s1 = await m('GET', '/pay/summary', undefined, { expect: 200 });
-  assert.equal(s1.data.feePaise, 1245);
+  assert.equal(s1.data.feePaise, undefined, 'no platform fee on member payments');
   assert.equal(s1.data.upi.upiId, 'samiti@okaxis');
   const due = s1.data.dues.payablePaise;
   assert.ok(due > 0, 'member has dues to pay');
@@ -405,10 +405,19 @@ test('payments: admin sets UPI; member pays by UPI with UTR; confirm applies due
 
   // UPI: pay ₹500 more than due → extra becomes advance credit
   const p = await m('POST', '/pay', { method: 'upi', amountPaise: String((due + 50000) / 100) }, { expect: 201 });
-  assert.equal(p.data.payment.totalPaise, due + 50000 + 1245);
+  assert.equal(p.data.payment.totalPaise, due + 50000);
   await m('POST', '/pay', { method: 'cash', amountPaise: '100' }, { expect: 409 }); // one open payment at a time
-  await m('POST', `/pay/${p.data.payment.id}/submit`, { utr: '123' }, { expect: 400 });
-  await m('POST', `/pay/${p.data.payment.id}/submit`, { utr: '412345678901' }, { expect: 200 });
+  const shot1 = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 1)]).toString('base64')}`;
+  const shot2 = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 2)]).toString('base64')}`;
+  const shot3 = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 3)]).toString('base64')}`;
+  await m('POST', `/pay/${p.data.payment.id}/submit`, { utr: '412345678901' }, { expect: 400 }); // screenshot needed
+  await m('POST', `/pay/${p.data.payment.id}/submit`, { screenshot: shot1, utr: '123' }, { expect: 400 });
+  const sub = await m('POST', `/pay/${p.data.payment.id}/submit`, { screenshot: shot1, utr: '412345678901' }, { expect: 200 });
+  assert.equal(sub.data.payment.hasScreenshot, true);
+  const pic = await fetch(`${base}/api/v1/receipts/${p.data.payment.id}/screenshot`, { headers: { Origin: 'http://localhost:3000' } });
+  assert.equal(pic.status, 401, 'screenshots need a login');
+  const listed = await admin('GET', '/payments?status=submitted', undefined, { expect: 200 });
+  assert.ok(!JSON.stringify(listed.data).includes('screenshot":{'), 'lists never carry the picture itself');
   const c = await admin('POST', `/payments/${p.data.payment.id}/confirm`, {}, { expect: 200 });
   assert.equal(c.data.payment.status, 'confirmed');
   assert.equal(c.data.payment.allocation.creditAfterPaise, 50000);
@@ -419,11 +428,15 @@ test('payments: admin sets UPI; member pays by UPI with UTR; confirm applies due
 
   // UPI not received → rejected; same UTR cannot be reused
   const p2 = await m('POST', '/pay', { method: 'upi', amountPaise: '100' }, { expect: 201 });
-  await m('POST', `/pay/${p2.data.payment.id}/submit`, { utr: '412345678901' }, { expect: 409 });
-  await m('POST', `/pay/${p2.data.payment.id}/submit`, { utr: '999999999999' }, { expect: 200 });
+  await m('POST', `/pay/${p2.data.payment.id}/submit`, { screenshot: shot2, utr: '412345678901' }, { expect: 409 }); // same UTR
+  const reused = await m('POST', `/pay/${p2.data.payment.id}/submit`, { screenshot: shot1 }, { expect: 409 }); // same screenshot
+  assert.equal(reused.data.error.code, 'screenshot_used');
+  await m('POST', `/pay/${p2.data.payment.id}/submit`, { screenshot: shot2 }, { expect: 200 });
   await admin('POST', `/payments/${p2.data.payment.id}/reject`, { reason: 'बैंक में पैसा नहीं आया' }, { expect: 200 });
   const r = await m('GET', `/pay/${p2.data.payment.id}`, undefined, { expect: 200 });
   assert.equal(r.data.payment.status, 'rejected');
+  await m('POST', `/pay/${p2.data.payment.id}/submit`, { screenshot: shot3 }, { expect: 200 }); // can send a new screenshot after a rejection
+  await admin('POST', `/payments/${p2.data.payment.id}/reject`, { reason: 'फिर भी नहीं आया' }, { expect: 200 });
 
   // cash at the counter → confirmed at once; receipt must be printed
   const cash = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '250' }, { expect: 201 });
@@ -437,43 +450,52 @@ test('payments: admin sets UPI; member pays by UPI with UTR; confirm applies due
 });
 
 
-test('razorpay: signed checkout confirms automatically; webhook confirms once; failure marked; forged signatures refused', async () => {
-  const crypto = await import('node:crypto');
-  const sign = (secret, data) => crypto.createHmac('sha256', secret).update(data).digest('hex');
-  const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
-  const before = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
-  assert.equal(before.online, true);
+test('platform fee: developer switches it on, a bill is made when the month ends, admin pays with screenshot, developer confirms', async () => {
+  const qr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const dev = agent();
+  await dev('POST', '/auth/login', DEV, { expect: 200 });
+  await admin('POST', '/platform/toggle', { on: true }, { expect: 403 }); // only the developer
+  await admin('PUT', '/platform/payee', { upiId: 'dev@okaxis', payeeName: 'Developer', qrImage: qr }, { expect: 403 });
+  await dev('PUT', '/platform/payee', { upiId: 'dev@okaxis', payeeName: 'Developer', qrImage: qr }, { expect: 200 });
+  const on = await dev('POST', '/platform/toggle', { on: true, ratePaise: '12.45' }, { expect: 200 });
+  assert.equal(on.data.on, true);
+  assert.equal(on.data.ratePaise, 1245);
+  assert.equal(on.data.current.days, 1, 'today is charged from the moment it is switched on');
+  assert.equal(on.data.current.amountPaise, 1245);
+  const seen = await admin('GET', '/platform', undefined, { expect: 200 });
+  assert.equal(seen.data.payee.upiId, 'dev@okaxis');
 
-  // 1) checkout success with a valid signature → confirmed by itself, no admin step
-  const a = await m('POST', '/pay/online', { amountPaise: '100' }, { expect: 201 });
-  assert.equal(a.data.checkout.amount, 10000 + 1245);
-  const orderId = a.data.checkout.orderId;
-  await m('POST', `/pay/${a.data.payment.id}/online-verify`, { razorpay_order_id: orderId, razorpay_payment_id: 'pay_A1', razorpay_signature: 'f'.repeat(64) }, { expect: 400 });
-  const ok = await m('POST', `/pay/${a.data.payment.id}/online-verify`, { razorpay_order_id: orderId, razorpay_payment_id: 'pay_A1', razorpay_signature: sign('ci_secret', `${orderId}|pay_A1`) }, { expect: 200 });
-  assert.equal(ok.data.payment.status, 'confirmed');
-  const after1 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
-  assert.equal(after1.dues.creditPaise, before.dues.creditPaise + 10000);
+  // pretend it was switched on on the 20th of last month → last month's bill = 20th..month end
+  const db = client('live');
+  const k = nowK - 1;
+  const last = ym(k);
+  const daysInLast = new Date(Date.UTC(last.year, last.month, 0)).getUTCDate();
+  await db.platformFeePeriod.updateMany({ data: { startedAt: new Date(Date.UTC(last.year, last.month - 1, 20, 6, 0)) } });
+  const ov = await admin('GET', '/platform', undefined, { expect: 200 });
+  const bill = ov.data.bills.find((x) => x.month === last.month && x.year === last.year);
+  assert.equal(bill.days, daysInLast - 19);
+  assert.equal(bill.amountPaise, (daysInLast - 19) * 1245);
+  assert.equal(bill.status, 'due');
+  assert.equal(ov.data.unpaidCount, 1);
+  assert.equal((await admin('GET', '/platform', undefined, { expect: 200 })).data.bills.length, 1, 'a bill is made only once');
 
-  // 2) phone closed mid-way: only the webhook arrives → confirmed; a replay does not apply twice
-  const b = await m('POST', '/pay/online', { amountPaise: '200' }, { expect: 201 });
-  const hook = (event, orderId, payId) => {
-    const body = JSON.stringify({ event, payload: { payment: { entity: { id: payId, order_id: orderId, notes: { env: 'live' }, error_description: 'Bank declined' } } } });
-    return fetch(`${base}/api/v1/webhooks/razorpay`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': sign('ci_whsec', body) }, body });
-  };
-  assert.equal((await hook('payment.captured', b.data.checkout.orderId, 'pay_B1')).status, 200);
-  assert.equal((await hook('payment.captured', b.data.checkout.orderId, 'pay_B1')).status, 200);
-  const after2 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
-  assert.equal(after2.dues.creditPaise, after1.dues.creditPaise + 20000, 'webhook replay must not double-count');
+  const shot = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 9)]).toString('base64')}`;
+  await admin('POST', `/platform/bills/${bill.id}/submit`, {}, { expect: 400 });
+  const sub = await admin('POST', `/platform/bills/${bill.id}/submit`, { screenshot: shot }, { expect: 200 });
+  assert.equal(sub.data.bill.status, 'submitted');
+  await admin('POST', `/platform/bills/${bill.id}/confirm`, {}, { expect: 403 });
+  const devNotes = await dev('GET', '/notifications', undefined, { expect: 200 });
+  assert.ok(JSON.stringify(devNotes.data).includes(`#${bill.billNo}`), 'developer is told to check the payment');
+  const shotRes = await dev('GET', `/platform/bills/${bill.id}/screenshot`, undefined, { expect: 200 });
+  assert.ok(shotRes.status === 200);
+  await dev('POST', `/platform/bills/${bill.id}/reject`, { reason: 'पैसा नहीं आया' }, { expect: 200 });
+  await admin('POST', `/platform/bills/${bill.id}/submit`, { screenshot: shot }, { expect: 200 }); // pays again
+  const paid = await dev('POST', `/platform/bills/${bill.id}/confirm`, {}, { expect: 200 });
+  assert.equal(paid.data.bill.status, 'paid');
+  assert.equal((await admin('GET', '/platform', undefined, { expect: 200 })).data.unpaidCount, 0);
 
-  // 3) failure from Razorpay → member sees failed
-  const c = await m('POST', '/pay/online', { amountPaise: '300' }, { expect: 201 });
-  await hook('payment.failed', c.data.checkout.orderId, 'pay_C1');
-  assert.equal((await m('GET', `/pay/${c.data.payment.id}`, undefined, { expect: 200 })).data.payment.status, 'rejected');
-
-  // forged webhook
-  const forged = await fetch(`${base}/api/v1/webhooks/razorpay`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': 'abc' }, body: '{}' });
-  assert.equal(forged.status, 400);
+  const off = await dev('POST', '/platform/toggle', { on: false }, { expect: 200 });
+  assert.equal(off.data.on, false);
 });
 
 test('backup contains every table', async () => {

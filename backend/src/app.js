@@ -14,7 +14,7 @@ import staffRoutes from './routes/staff.js';
 import { support, notifications } from './routes/support.js';
 import { memberPay, payments, upiSettings, receipts } from './routes/pay.js';
 import { notFound, errorHandler } from './middleware/error.js';
-import { razorpayWebhook } from './routes/webhooks.js';
+import platform from './routes/platform.js';
 import loanApply from './routes/loanApply.js';
 
 export function createApp() {
@@ -22,8 +22,6 @@ export function createApp() {
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(helmet());
-  // Razorpay webhook needs the exact raw body to check its signature — before the JSON parser
-  app.post('/api/v1/webhooks/razorpay', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => razorpayWebhook(req, res).catch(next));
   // loan applications carry three document photos (compressed in the browser)
   app.use('/api/v1/loan-apply', express.json({ limit: '20mb' }));
   app.use(express.json({ limit: '4mb' }));
@@ -73,6 +71,7 @@ export function createApp() {
   api.use('/audit-log', requireManager, auditLog);
   api.use('/backup', requireManager, backup);
   api.use('/practice', requireManager, practice);
+  api.use('/platform', requireManager, platform); // platform fee bills: developer ↔ admin
 
   app.use('/api/v1', api);
   app.use(notFound);

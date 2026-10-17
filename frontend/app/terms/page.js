@@ -2,14 +2,12 @@
 import { useTranslation } from 'react-i18next';
 import { PublicShell } from '@/components/shell';
 import { Card } from '@/components/ui';
-import { money } from '@/lib/format';
 
-const FEE_PAISE = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PAISE ?? 1245);
 
 /** नियम और शर्तें — short, plain terms for members and staff. */
 export default function Terms() {
   const { t } = useTranslation();
-  const items = Array.from({ length: 8 }, (_, i) => t(`terms.p${i + 1}`, { fee: money(FEE_PAISE) }));
+  const items = Array.from({ length: 8 }, (_, i) => t(`terms.p${i + 1}`));
   return (
     <PublicShell>
       <Card title={t('terms.title')} icon="file">
