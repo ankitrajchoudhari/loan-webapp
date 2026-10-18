@@ -6,15 +6,15 @@ import MemberPicker from './MemberPicker';
 import DateField, { MonthYearSelect } from './DateField';
 import LoanTerms from './LoanTerms';
 import { METHOD_OPTIONS } from './InstallmentEdit';
-import { nowMonthYear, todayIST, fmtDate } from '@/lib/format';
+import { nowMonthYear, todayIST, fmtDate, defaultDateFor, defaultRecordDate } from '@/lib/format';
 
 export const KINDS = ['installment', 'loan', 'repayment'];
 
 export function blankRow(kind) {
   const now = nowMonthYear();
-  if (kind === 'installment') return { memberNo: '', month: String(now.month), year: String(now.year - 1), amount: '1000', paidOn: `${now.year - 1}-${String(now.month).padStart(2, '0')}-05`, method: 'cash', note: '' };
+  if (kind === 'installment') return { memberNo: '', month: String(now.month), year: String(now.year - 1), amount: '1000', paidOn: defaultDateFor(now.month, now.year - 1), method: 'cash', note: '' };
   if (kind === 'loan') return { memberNo: '', takenOn: todayIST(), principal: '', interestMethod: 'reducing', rate: '2', ratePeriod: 'month', fixedInterest: '', interestFromMonth: '', interestFromYear: '', installment: '', openingInterest: '', note: '' };
-  return { memberNo: '', loanNo: '', paidOn: todayIST(), total: '', principal: '', interest: '', method: 'cash', note: '' };
+  return { memberNo: '', loanNo: '', paidOn: defaultRecordDate(), total: '', principal: '', interest: '', method: 'cash', note: '' };
 }
 
 /** One-line description of a row for tables. */
@@ -59,7 +59,7 @@ export default function HistoryRowForm({ kind, d, setD }) {
       {kind === 'installment' && (
         <>
           <Field label={t('history.oldMonth')} required>
-            <MonthYearSelect month={Number(d.month) || 1} year={Number(d.year) || nowMonthYear().year} onChange={({ month, year }) => setD((s) => ({ ...s, month: String(month), year: String(year) }))} />
+            <MonthYearSelect month={Number(d.month) || 1} year={Number(d.year) || nowMonthYear().year} onChange={({ month, year }) => setD((s) => ({ ...s, month: String(month), year: String(year), paidOn: defaultDateFor(month, year) }))} />
           </Field>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label={t('history.oldAmount')} required><MoneyInput value={d.amount} onChange={set('amount')} /></Field>

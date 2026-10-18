@@ -49,11 +49,21 @@ export function nowMonthYear() {
 
 export const pad2 = (n) => String(n).padStart(2, '0');
 
-/** A sensible default payment date for a month: today if it's this month, else the 5th. */
+/** The samiti's usual payment day. New records default to the 10th of their month. */
+export const PAY_DAY = 10;
+
+/** Default date for a record of a month: the 10th — or today, if the 10th of this month hasn't come yet. */
 export function defaultDateFor(month, year) {
-  const now = nowMonthYear();
-  return now.month === month && now.year === year ? todayIST() : `${year}-${pad2(month)}-05`;
+  const tenth = `${year}-${pad2(month)}-${pad2(PAY_DAY)}`;
+  const today = todayIST();
+  return tenth > today ? today : tenth;
 }
+
+/** Default date for a new record today: the 10th of this month (or today, before the 10th). */
+export const defaultRecordDate = () => {
+  const { month, year } = nowMonthYear();
+  return defaultDateFor(month, year);
+};
 
 export const prevMonth = ({ month, year }) => (month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year });
 export const nextMonth = ({ month, year }) => (month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year });

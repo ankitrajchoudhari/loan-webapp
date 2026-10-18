@@ -13,7 +13,7 @@ import { interestRule, methodLabel } from '@/components/statement';
 import { useToast } from '@/app/providers';
 import { useApi } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { fmtDate, money, rupeesText, todayIST, toPaise } from '@/lib/format';
+import { defaultRecordDate, fmtDate, money, rupeesText, toPaise } from '@/lib/format';
 
 export default function LoanAccount({ params }) {
   const { id } = use(params);
@@ -257,7 +257,7 @@ function RepaymentForm({ loan, onSaved }) {
   const { t } = useTranslation();
   // pre-fill what is due now (this month + anything overdue), else the agreed installment
   const suggested = loan.insights?.dueNowPaise || loan.installmentPaise;
-  const blank = { paidOn: todayIST(), total: suggested ? rupeesText(suggested) : '', principal: '', interest: '', method: 'cash', note: '' };
+  const blank = { paidOn: defaultRecordDate(), total: suggested ? rupeesText(suggested) : '', principal: '', interest: '', method: 'cash', note: '' };
   const [f, setF] = useState(blank);
   const [preview, setPreview] = useState(null);
   const { busy, error, run } = useAction();
