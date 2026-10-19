@@ -69,7 +69,7 @@ export function LiveClock() {
 function BrandBar({ children, left }) {
   const { t } = useTranslation();
   return (
-    <header className="no-print sticky top-0 z-30 border-b-4 border-brand bg-white shadow-sm">
+    <header className="no-print sticky top-0 z-30 border-b border-line bg-white/95 shadow-[0_1px_0_rgba(233,184,102,.6),0_8px_24px_-18px_rgba(60,30,0,.35)] backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
         {left}
         <span className="hidden min-[400px]:block"><Emblem /></span>
@@ -185,20 +185,20 @@ export function MemberShell({ children }) {
 // Spec §3B main menu, in this order.
 // [href, icon, label, who may see it: null = everyone, 'manager' = developer/admin, 'developer', else a work area]
 const ADMIN_NAV = [
-  ['/admin', 'home', 'nav.home', null],
-  ['/admin/members', 'users', 'nav.members', 'members'],
-  ['/admin/installments', 'calendarCheck', 'nav.installments', 'installments'],
-  ['/admin/loans', 'handCoins', 'nav.loans', 'loans'],
-  ['/admin/loan-applications', 'send', 'nav.loanApplications', 'loans'],
-  ['/admin/payments', 'wallet', 'nav.payments', 'payments'],
-  ['/admin/history', 'history', 'nav.history', 'history'],
-  ['/admin/reports', 'chart', 'nav.reports', 'reports'],
-  ['/admin/team', 'shield', 'nav.team', 'manager'],
-  ['/admin/changes', 'log', 'settings.changeLog', null],
-  ['/admin/platform', 'receipt', 'nav.platform', 'developer'],
-  ['/admin/login-help', 'phone', 'nav.loginHelp', 'manager'],
-  ['/admin/support', 'message', 'nav.support', null],
-  ['/admin/settings', 'settings', 'nav.settings', 'manager'],
+  ['/admin', 'home', 'nav.home', null, 'main'],
+  ['/admin/members', 'users', 'nav.members', 'members', 'main'],
+  ['/admin/installments', 'calendarCheck', 'nav.installments', 'installments', 'money'],
+  ['/admin/payments', 'wallet', 'nav.payments', 'payments', 'money'],
+  ['/admin/loans', 'handCoins', 'nav.loans', 'loans', 'money'],
+  ['/admin/loan-applications', 'send', 'nav.loanApplications', 'loans', 'money'],
+  ['/admin/reports', 'chart', 'nav.reports', 'reports', 'records'],
+  ['/admin/history', 'history', 'nav.history', 'history', 'records'],
+  ['/admin/changes', 'log', 'settings.changeLog', null, 'records'],
+  ['/admin/team', 'shield', 'nav.team', 'manager', 'manage'],
+  ['/admin/login-help', 'phone', 'nav.loginHelp', 'manager', 'manage'],
+  ['/admin/support', 'message', 'nav.support', null, 'manage'],
+  ['/admin/platform', 'receipt', 'nav.platform', 'developer', 'manage'],
+  ['/admin/settings', 'settings', 'nav.settings', 'manager', 'manage'],
 ];
 
 // the pages staff use most, for the phone tab bar (first four they may use, then "Menu")
@@ -225,21 +225,26 @@ function NavLinks({ onNavigate, user }) {
   const pathname = usePathname();
   const { t } = useTranslation();
   return (
-    <nav className="space-y-1">
-      {ADMIN_NAV.filter(([, , , need]) => allowed(user, need)).map(([href, icon, label]) => {
+    <nav>
+      {ADMIN_NAV.filter(([, , , need]) => allowed(user, need)).map(([href, icon, label, , group], i, list) => {
         const active = href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
+        const heading = group !== list[i - 1]?.[4];
         return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            className={`flex min-h-12 items-center gap-3 rounded-xl px-3 text-base font-semibold transition ${
-              active ? 'bg-maroon text-white shadow-sm' : 'text-ink hover:bg-brand-50'
-            }`}
-          >
-            <Icon name={icon} className="size-5 shrink-0" />
-            {t(label)}
-          </Link>
+          <div key={href}>
+            {heading && <div className={`eyebrow px-3 pb-1.5 text-muted/80 ${i ? 'pt-5' : 'pt-1'}`}>{t(`navGroup.${group}`)}</div>}
+            <Link
+              href={href}
+              onClick={onNavigate}
+              aria-current={active ? 'page' : undefined}
+              className={`relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[0.95rem] font-semibold transition ${
+                active ? 'bg-maroon/[.07] text-maroon' : 'text-ink/80 hover:bg-paper hover:text-ink'
+              }`}
+            >
+              {active && <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-maroon" />}
+              <Icon name={icon} className={`size-5 shrink-0 ${active ? 'text-maroon' : 'text-muted'}`} />
+              {t(label)}
+            </Link>
+          </div>
         );
       })}
     </nav>
@@ -274,12 +279,17 @@ export function AdminShell({ children }) {
       {who?.env === 'test' && <PracticeBanner />}
 
       <div className="mx-auto flex max-w-6xl gap-6 px-4">
-        <aside className="no-print sticky top-[80px] hidden h-[calc(100dvh-96px)] w-60 shrink-0 overflow-y-auto py-6 lg:block">
-          <div className="mb-3 px-3">
-            <div className="font-semibold">{who?.user?.name}</div>
-            <div className="text-sm text-muted">{who?.user?.staffRole ? t(`role.${who.user.staffRole}`) : ''}</div>
+        <aside className="no-print sticky top-[84px] hidden h-[calc(100dvh-100px)] w-64 shrink-0 py-5 lg:block">
+          <div className="surface flex h-full flex-col overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-line p-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-maroon text-sm font-bold text-gold">{(who?.user?.name ?? '?').trim()[0]?.toUpperCase()}</span>
+              <div className="min-w-0">
+                <div className="truncate font-bold">{who?.user?.name}</div>
+                <div className="text-xs font-semibold text-muted">{who?.user?.staffRole ? t(`role.${who.user.staffRole}`) : ''}</div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2.5"><NavLinks user={who?.user} /></div>
           </div>
-          <NavLinks user={who?.user} />
         </aside>
         <main className="min-w-0 flex-1 pb-28 pt-4 sm:pt-6 lg:pb-16">
           <PrintHeader />

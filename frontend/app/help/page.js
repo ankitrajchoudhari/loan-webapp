@@ -26,7 +26,7 @@ export default function Help() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-between gap-3 border-b-4 border-brand bg-white px-4 py-2">
+      <header className="flex items-center justify-between gap-3 border-b border-line bg-white px-4 py-2 shadow-[0_1px_0_rgba(233,184,102,.6)]">
         <Link href="/" className="flex items-center gap-2" aria-label={t('common.back')}><Emblem className="size-9" /></Link>
         <div className="flex items-center gap-3"><LiveClock /><LangToggle /></div>
       </header>

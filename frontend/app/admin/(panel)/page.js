@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import { ButtonLink, ErrorBox, Loading, Progress, Stat } from '@/components/ui';
+import { ErrorBox, Loading, Stat } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { useApi } from '@/lib/hooks';
 import { getWho } from '@/lib/api';
@@ -27,70 +27,56 @@ export default function AdminHome() {
 
   return (
     <div className="space-y-5">
-      {/* hero: the samiti's money today */}
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-5 text-white shadow-lg sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      {/* the samiti's money today */}
+      <section className="hero-card overflow-hidden rounded-[1.6rem] text-white">
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.1fr_1fr] lg:items-center">
           <div>
-            <div className="text-sm text-white/75">{t('dash.hello', { name: user?.name ?? '' })} · {t('dash.asOf', { month })}</div>
-            <div className="mt-2 text-sm font-semibold uppercase tracking-wide text-brand-100">{t('dash.cashInHand')}</div>
-            <div className="num text-4xl font-extrabold sm:text-5xl">{money(data.cashInHandPaise)}</div>
-            <div className="mt-1 text-sm text-white/75">{t('dash.cashFormula')}</div>
+            <div className="text-sm text-white/65">{t('dash.hello', { name: user?.name ?? '' })} · {t('dash.asOf', { month })}</div>
+            <div className="eyebrow mt-4 text-gold">{t('dash.cashInHand')}</div>
+            <div className="num mt-1 text-[2.6rem] font-extrabold leading-none tracking-tight sm:text-5xl">{money(data.cashInHandPaise)}</div>
+            <div className="mt-2 text-xs text-white/55">{t('dash.cashFormula')}</div>
           </div>
-          <div className="grid min-w-56 grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl bg-white/10 p-3">
-              <div className="text-white/70">{t('dash.totalCollected')}</div>
-              <div className="num text-lg font-bold">{money(data.totalInstallmentsPaise)}</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 p-3">
-              <div className="text-white/70">{t('dash.interestEarned')}</div>
-              <div className="num text-lg font-bold text-brand-100">{money(data.interestEarnedPaise)}</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 p-3">
-              <div className="text-white/70">{t('dash.loansGiven')}</div>
-              <div className="num text-lg font-bold">{money(data.loansGivenPaise)}</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 p-3">
-              <div className="text-white/70">{t('dash.principalBack')}</div>
-              <div className="num text-lg font-bold">{money(data.principalReturnedPaise)}</div>
-            </div>
+          <div className="grid grid-cols-2 overflow-hidden rounded-2xl bg-white/[.06] ring-1 ring-white/10">
+            {[
+              [t('dash.totalCollected'), data.totalInstallmentsPaise],
+              [t('dash.interestEarned'), data.interestEarnedPaise, true],
+              [t('dash.loansGiven'), data.loansGivenPaise],
+              [t('dash.principalBack'), data.principalReturnedPaise],
+            ].map(([label, v, gold], i) => (
+              <div key={label} className={`p-3.5 ${i % 2 ? 'border-l border-white/10' : ''} ${i > 1 ? 'border-t border-white/10' : ''}`}>
+                <div className="text-xs text-white/60">{label}</div>
+                <div className={`num mt-0.5 text-lg font-bold ${gold ? 'text-gold' : ''}`}>{money(v)}</div>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="mt-5">
-          <Progress tone="light" value={paidPct} label={t('dash.paidCount', { paid: data.paidThisMonth, due: data.dueThisMonth })} />
+        <div className="border-t border-white/10 bg-black/10 px-5 py-3.5 sm:px-6">
+          <div className="mb-1.5 flex items-baseline justify-between text-sm">
+            <span className="text-white/75">{t('dash.paidCount', { paid: data.paidThisMonth, due: data.dueThisMonth })}</span>
+            <span className="num font-bold">{paidPct}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-gold" style={{ width: `${paidPct}%` }} /></div>
         </div>
       </section>
 
-      {/* alerts */}
-      {data.loanApplicationsPending > 0 && (
-        <Link href="/admin/loan-applications" className="flex items-center gap-3 rounded-2xl border-2 border-brand/40 bg-brand-50 p-4 text-maroon shadow-sm hover:shadow-md">
-          <span className="relative grid size-11 shrink-0 place-items-center rounded-xl bg-brand text-white">
-            <Icon name="handCoins" className="size-6" />
-            <span className="absolute -right-1.5 -top-1.5 grid size-6 place-items-center rounded-full bg-bad text-xs font-bold text-white">{data.loanApplicationsPending}</span>
-          </span>
-          <span className="flex-1">
-            <span className="block text-lg font-bold">{t('dash.alertLoanApps', { n: data.loanApplicationsPending })}</span>
-            <span className="block text-sm text-muted">{t('dash.alertLoanAppsSub')}</span>
-          </span>
-          <Icon name="chevronRight" className="size-5" />
-        </Link>
-      )}
-      {(data.overdueLoans > 0 || data.arrearsMembers > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {data.arrearsMembers > 0 && (
-            <Link href="/admin/reports?type=pending" className="flex items-center gap-3 rounded-2xl border border-bad/30 bg-bad-bg p-4 text-bad hover:shadow-md">
-              <Icon name="clock" className="size-6 shrink-0" />
-              <span className="flex-1 font-semibold">{t('dash.alertDues', { n: data.arrearsMembers, amount: money(data.installmentArrearsPaise) })}</span>
-              <Icon name="chevronRight" className="size-5" />
+      {/* things that need attention */}
+      {(data.loanApplicationsPending > 0 || data.arrearsMembers > 0 || data.overdueLoans > 0) && (
+        <section className="surface divide-y divide-line overflow-hidden">
+          {[
+            data.loanApplicationsPending > 0 && ['/admin/loan-applications', 'send', 'bg-brand', t('dash.alertLoanApps', { n: data.loanApplicationsPending }), t('dash.alertLoanAppsSub')],
+            data.arrearsMembers > 0 && ['/admin/reports?type=pending', 'clock', 'bg-bad', t('dash.alertDues', { n: data.arrearsMembers, amount: money(data.installmentArrearsPaise) }), null],
+            data.overdueLoans > 0 && ['/admin/loans', 'alert', 'bg-warn', t('dash.alertOverdue', { n: data.overdueLoans, amount: money(data.overduePaise) }), null],
+          ].filter(Boolean).map(([href, icon, dot, title, sub]) => (
+            <Link key={href} href={href} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-paper/60">
+              <span className={`grid size-9 shrink-0 place-items-center rounded-xl text-white ${dot}`}><Icon name={icon} className="size-[1.1rem]" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-tight">{title}</span>
+                {sub && <span className="block text-xs text-muted">{sub}</span>}
+              </span>
+              <Icon name="chevronRight" className="size-4 text-muted" />
             </Link>
-          )}
-          {data.overdueLoans > 0 && (
-            <Link href="/admin/loans" className="flex items-center gap-3 rounded-2xl border border-warn/30 bg-warn-bg p-4 text-warn hover:shadow-md">
-              <Icon name="alert" className="size-6 shrink-0" />
-              <span className="flex-1 font-semibold">{t('dash.alertOverdue', { n: data.overdueLoans, amount: money(data.overduePaise) })}</span>
-              <Icon name="chevronRight" className="size-5" />
-            </Link>
-          )}
-        </div>
+          ))}
+        </section>
       )}
 
       {/* spec §4.1 figures */}
@@ -108,10 +94,13 @@ export default function AdminHome() {
 
       {quick.length > 0 && (
         <div>
-          <h2 className="mb-3 text-lg font-bold text-maroon">{t('dash.quick')}</h2>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <h2 className="eyebrow mb-2.5 px-1 text-muted">{t('dash.quick')}</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {quick.map(([href, icon, label], i) => (
-              <ButtonLink key={href} href={href} icon={icon} size="md" variant={i ? 'secondary' : 'primary'} full>{t(label)}</ButtonLink>
+              <Link key={href} href={href} className="surface group flex flex-col gap-3 p-4 transition hover:-translate-y-0.5">
+                <span className={`grid size-10 place-items-center rounded-xl ${i ? 'bg-paper text-maroon' : 'bg-maroon text-gold'}`}><Icon name={icon} className="size-5" /></span>
+                <span className="flex items-center justify-between gap-2 text-sm font-semibold leading-tight">{t(label)}<Icon name="chevronRight" className="size-4 shrink-0 text-muted transition group-hover:translate-x-0.5" /></span>
+              </Link>
             ))}
           </div>
         </div>

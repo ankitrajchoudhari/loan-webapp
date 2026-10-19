@@ -1372,4 +1372,8 @@ export const messages = {
   "home.actSettle": ["सेटलमेंट", "Settle"],
   "home.emiCovered": ["जमा", "Paid"],
   "home.thisMonthPaid": ["इस महीने की जमा", "Paid this month"],
+  "navGroup.main": ["मुख्य", "Main"],
+  "navGroup.money": ["पैसा", "Money"],
+  "navGroup.records": ["हिसाब-किताब", "Records"],
+  "navGroup.manage": ["प्रबंधन", "Manage"],
 };

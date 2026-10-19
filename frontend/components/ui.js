@@ -42,16 +42,16 @@ export function ButtonLink({ href, variant, size, full, icon, className = '', ch
 }
 
 export function Card({ title, icon, action, tone, className = '', children }) {
-  const ring = tone === 'test' ? 'border-test/40 bg-test-bg/40' : 'border-line bg-white';
+  const ring = tone === 'test' ? 'border border-test/40 bg-test-bg/40 rounded-[1.25rem]' : 'surface';
   return (
-    <section className={`print-card rounded-2xl border p-5 shadow-[0_1px_3px_rgba(60,30,0,.06)] ${ring} ${className}`}>
+    <section className={`print-card p-5 ${ring} ${className}`}>
       {(title || action) && (
         <header className="mb-4 flex items-center justify-between gap-3">
           {title && (
-            <h2 className="flex items-center gap-2.5 text-xl font-bold text-maroon">
+            <h2 className="flex items-center gap-2.5 text-lg font-bold text-ink">
               {icon && (
-                <span className="grid size-9 place-items-center rounded-xl bg-brand-50 text-brand-dark">
-                  <Icon name={icon} className="size-5" />
+                <span className="grid size-9 place-items-center rounded-xl bg-paper text-maroon">
+                  <Icon name={icon} className="size-[1.15rem]" />
                 </span>
               )}
               {title}
@@ -88,10 +88,10 @@ export function Badge({ tone = 'neutral', icon, children, className = '' }) {
     bad: 'bg-bad-bg text-bad',
     test: 'bg-test-bg text-test',
     brand: 'bg-brand-50 text-brand-dark',
-    neutral: 'bg-stone-100 text-muted',
+    neutral: 'bg-paper text-muted',
   };
   return (
-    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-sm font-semibold ${tones[tone]} ${className}`}>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[0.8rem] font-semibold ${tones[tone]} ${className}`}>
       {icon && <Icon name={icon} className="size-3.5" strokeWidth={3} />}
       {children}
     </span>
@@ -104,26 +104,26 @@ export function TestBadge() {
 }
 
 const TONE_TEXT = { ok: 'text-ok', warn: 'text-warn', bad: 'text-bad', brand: 'text-brand-dark', test: 'text-test' };
-const TONE_BUBBLE = { ok: 'bg-ok-bg text-ok', warn: 'bg-warn-bg text-warn', bad: 'bg-bad-bg text-bad', brand: 'bg-brand-50 text-brand-dark', test: 'bg-test-bg text-test' };
+const TONE_BUBBLE = { ok: 'bg-ok-bg text-ok', warn: 'bg-warn-bg text-warn', bad: 'bg-bad-bg text-bad', brand: 'bg-paper text-maroon', test: 'bg-test-bg text-test' };
 
 /** Figure tile with a coloured icon bubble. */
 export function Stat({ label, value, sub, tone, icon, href }) {
   const body = (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[0.8rem] font-semibold leading-tight text-muted">{label}</div>
+        <div className={`num mt-1.5 text-[1.6rem] font-extrabold leading-none tracking-tight ${TONE_TEXT[tone] ?? 'text-ink'}`}>{value}</div>
+        {sub && <div className="mt-1.5 text-xs text-muted">{sub}</div>}
+      </div>
       {icon && (
-        <span className={`grid size-11 shrink-0 place-items-center rounded-2xl ${TONE_BUBBLE[tone] ?? 'bg-brand-50 text-maroon'}`}>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${TONE_BUBBLE[tone] ?? 'bg-paper text-maroon'}`}>
           <Icon name={icon} className="size-5" />
         </span>
       )}
-      <div className="min-w-0">
-        <div className="text-sm font-medium leading-tight text-muted">{label}</div>
-        <div className={`num mt-1 text-2xl font-bold ${TONE_TEXT[tone] ?? 'text-maroon'}`}>{value}</div>
-        {sub && <div className="mt-0.5 text-sm text-muted">{sub}</div>}
-      </div>
     </div>
   );
-  const cls = 'print-card block rounded-2xl border border-line bg-white p-4 shadow-[0_1px_3px_rgba(60,30,0,.06)]';
-  return href ? <Link href={href} className={`${cls} transition hover:-translate-y-0.5 hover:border-brand/50 hover:shadow-md`}>{body}</Link> : <div className={cls}>{body}</div>;
+  const cls = 'print-card surface block p-4';
+  return href ? <Link href={href} className={`${cls} transition hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(60,30,0,.05),0_18px_36px_-20px_rgba(60,30,0,.35)]`}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
 /** Thin progress bar (0–100). */
@@ -133,7 +133,7 @@ export function Progress({ value, tone = 'ok', label }) {
   return (
     <div>
       {label && <div className="mb-1 flex justify-between text-sm"><span>{label}</span><span className="num font-semibold">{pct}%</span></div>}
-      <div className={`h-2.5 w-full overflow-hidden rounded-full ${tone === 'light' ? 'bg-white/25' : 'bg-stone-200'}`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className={`h-2 w-full overflow-hidden rounded-full ${tone === 'light' ? 'bg-white/20' : 'bg-paper'}`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -143,7 +143,7 @@ export function Progress({ value, tone = 'ok', label }) {
 /** Small key figure: label on top, value below. */
 export function Kpi({ label, value, tone, sub }) {
   return (
-    <div className="rounded-xl bg-stone-50 px-3 py-2">
+    <div className="rounded-xl bg-paper/70 px-3 py-2">
       <div className="text-xs font-medium text-muted">{label}</div>
       <div className={`num text-lg font-bold ${TONE_TEXT[tone] ?? 'text-ink'}`}>{value}</div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
@@ -222,10 +222,10 @@ export function TableWrap({ children, min = 560 }) {
 /** Segmented two/three-way choice with big tap targets. */
 export function Segmented({ value, onChange, options, size = 'md' }) {
   return (
-    <div className="inline-flex w-full rounded-xl border-2 border-line bg-white p-1" role="radiogroup">
+    <div className="inline-flex w-full rounded-2xl bg-paper p-1" role="radiogroup">
       {options.map((o) => {
         const on = o.value === value;
-        const tone = on ? (o.tone === 'bad' ? 'bg-bad text-white' : o.tone === 'ok' ? 'bg-ok text-white' : 'bg-maroon text-white') : 'text-muted hover:bg-brand-50';
+        const tone = on ? `bg-white shadow-[0_1px_2px_rgba(60,30,0,.08),0_4px_12px_-6px_rgba(60,30,0,.25)] ${o.tone === 'bad' ? 'text-bad' : o.tone === 'ok' ? 'text-ok' : 'text-maroon'}` : 'text-muted hover:text-ink';
         return (
           <button
             key={String(o.value)}
@@ -233,7 +233,7 @@ export function Segmented({ value, onChange, options, size = 'md' }) {
             role="radio"
             aria-checked={on}
             onClick={() => onChange(o.value)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 font-semibold transition ${size === 'md' ? 'min-h-11 text-base' : 'min-h-9 text-sm'} ${tone}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 font-semibold transition ${size === 'md' ? 'min-h-11 text-base' : 'min-h-9 text-sm'} ${tone}`}
           >
             {o.icon && <Icon name={o.icon} className="size-4" strokeWidth={3} />}
             {o.label}
@@ -367,8 +367,8 @@ export function PageTitle({ title, subtitle, back, action }) {
           </Link>
         )}
         <div>
-          <h1 className="text-2xl font-bold leading-tight text-maroon sm:text-3xl">{title}</h1>
-          {subtitle && <p className="mt-1 text-muted">{subtitle}</p>}
+          <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-[1.75rem]">{title}</h1>
+          {subtitle && <p className="mt-1 text-[0.92rem] text-muted">{subtitle}</p>}
         </div>
       </div>
       {action}
