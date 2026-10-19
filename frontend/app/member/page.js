@@ -62,7 +62,10 @@ export default function MemberHome() {
   const { member, installment: inst, hasLoans, loanTotals, earlierArrears } = data;
   const pending = inst.pendingPaise + earlierArrears.amountPaise;
   const paidPct = inst.duePaise ? Math.round((inst.paidPaise * 100) / inst.duePaise) : 100;
-  const loanPct = loanTotals?.principalPaise ? Math.floor((loanTotals.principalPaidPaise * 100) / loanTotals.principalPaise) : 0;
+  // progress and "still to repay" use only loans being repaid now (a closed or topped-up loan is left out)
+  const running = data.runningLoans ?? loanTotals;
+  const hasRunning = (data.runningLoanCount ?? (hasLoans ? 1 : 0)) > 0 && running.totalOutstandingPaise > 0;
+  const loanPct = running?.principalPaise ? Math.floor((running.principalPaidPaise * 100) / running.principalPaise) : 0;
   const credit = data.pay?.creditPaise ?? 0;
   // everything owed now: installments AND loan dues (after any advance) — the same figure the Pay page asks for
   const owed = data.pay?.payablePaise ?? pending;
@@ -90,9 +93,13 @@ export default function MemberHome() {
             <div className="num text-base font-bold">{fmtDate(member.joinDate)}</div>
           </div>
         </div>
-        <div className={`relative mt-2 flex items-center gap-2 rounded-xl px-3 py-2 font-bold ${owed > 0 ? 'bg-white text-bad' : 'bg-ok text-white'}`}>
-          <Icon name={owed > 0 ? 'alert' : 'checkCircle'} className="size-5 shrink-0" />
-          <span className="flex-1">{owed > 0 ? t('member.dueNow', { amount: money(owed) }) : t('member.allPaid')}</span>
+        <div className={`relative mt-2 flex items-center gap-2 rounded-xl px-3 py-2 font-bold ${owed > 0 ? 'bg-white text-bad' : hasRunning ? 'bg-white text-warn' : 'bg-ok text-white'}`}>
+          <Icon name={owed > 0 ? 'alert' : hasRunning ? 'clock' : 'checkCircle'} className="size-5 shrink-0" />
+          <span className="flex-1">
+            {owed > 0 ? t('member.dueNow', { amount: money(owed) })
+              : hasRunning ? t('member.paidButLoanLeft', { amount: money(running.totalOutstandingPaise) })
+              : t('member.allPaid')}
+          </span>
           {credit > 0 && <span className="num rounded-full bg-ok-bg px-2 py-0.5 text-xs text-ok">{t('member.advance', { amount: money(credit) })}</span>}
         </div>
       </section>
@@ -135,23 +142,23 @@ export default function MemberHome() {
       </Box>
 
       {/* loan */}
-      {hasLoans ? (
+      {hasRunning ? (
         <Box icon="handCoins" title={t('stmt.loanTitle')}
           aside={data.loanStatus?.payoff && !data.loanStatus.overduePaise ? t('member.loanEnds', { month: t(`m${data.loanStatus.payoff.month}`), year: data.loanStatus.payoff.year }) : null}>
           <div className="mb-1 mt-1 flex items-baseline justify-between text-sm">
             <span className="text-muted">{t('member.loanRepaid', { pct: loanPct })}</span>
-            <span className="num text-muted">{money(loanTotals.principalPaidPaise)} / {money(loanTotals.principalPaise)}</span>
+            <span className="num text-muted">{money(running.principalPaidPaise)} / {money(running.principalPaise)}</span>
           </div>
           <Bar pct={loanPct} tone="brand" />
-          <Line label={t('member.loanLeft')} value={money(loanTotals.principalOutstandingPaise)} tone="warn" />
-          <Line label={t('member.interestLeft')} value={money(Math.max(0, loanTotals.interestOutstandingPaise))} tone="warn" />
-          <Line label={t('label.totalOutstanding')} value={money(loanTotals.totalOutstandingPaise)} tone="bad" strong />
+          <Line label={t('member.loanLeft')} value={money(running.principalOutstandingPaise)} tone="warn" />
+          <Line label={t('member.interestLeft')} value={money(Math.max(0, running.interestOutstandingPaise))} tone="warn" />
+          <Line label={t('label.totalOutstanding')} value={money(running.totalOutstandingPaise)} tone="bad" strong />
           {data.loanStatus?.overduePaise > 0 && (
             <p className="mt-1 rounded-lg bg-bad-bg px-2 py-1 text-sm font-semibold text-bad">{t('member.loanOverdue', { amount: money(data.loanStatus.overduePaise), n: data.loanStatus.monthsBehind })}</p>
           )}
         </Box>
       ) : (
-        <p className="flex items-center justify-center gap-2 rounded-2xl bg-ok-bg px-4 py-3 text-center font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{t('member.noLoan')}</p>
+        <p className="flex items-center justify-center gap-2 rounded-2xl bg-ok-bg px-4 py-3 text-center font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{hasLoans ? t('member.loansRepaid') : t('member.noLoan')}</p>
       )}
 
       {/* loan application */}

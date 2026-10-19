@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, MoneyInput, Notice, PageTitle, Progress, Row, Segmented, TableWrap, TextArea } from '@/components/ui';
 import { LoanStatus, ScheduleTable } from '@/components/LoanBits';
+import { Icon } from '@/components/icons';
 import DateField from '@/components/DateField';
 import LoanTerms, { termsFromLoan, termsBody } from '@/components/LoanTerms';
 import { METHOD_OPTIONS } from '@/components/InstallmentEdit';
@@ -41,13 +42,13 @@ export default function LoanAccount({ params }) {
         title={`${t('loan.no', { n: loan.loanNo })} — ${loan.member.fullName}`}
         subtitle={`${t('field.memberNo')} ${loan.member.memberNo} · ${fmtDate(loan.takenOn)}`}
         back="/admin/loans"
-        action={
+        action={loan.voided ? <Badge tone="bad" icon="x" className="text-base">{t('loans.cancelledBadge')}</Badge> : (
           <div className="flex flex-wrap gap-2">
             {!p.closed && <Button size="md" variant="success" icon="plus" onClick={() => setDialog({ kind: 'topup' })}>{t('topup.button')}</Button>}
             <Button size="md" variant="secondary" icon="edit" onClick={() => setDialog({ kind: 'terms' })}>{t('loans.changeTerms')}</Button>
             <Button size="md" variant="danger" icon="x" onClick={() => setDialog({ kind: 'voidLoan' })}>{t('loans.voidLoan')}</Button>
           </div>
-        }
+        )}
       />
 
       {loan.topupOfLoanId && (
@@ -63,8 +64,16 @@ export default function LoanAccount({ params }) {
         </Notice>
       )}
 
+      {loan.voided && (
+        <div className="rounded-3xl border-2 border-bad/40 bg-bad-bg p-5 text-bad">
+          <div className="flex items-center gap-2 text-xl font-bold"><Icon name="x" className="size-6" />{t('loans.cancelledTitle')}</div>
+          <p className="mt-1">{t('loans.cancelledText')}</p>
+          {loan.voidReason && <p className="mt-2 rounded-xl bg-white/70 p-2 text-ink"><b>{t('edit.reason')}:</b> {loan.voidReason}</p>}
+        </div>
+      )}
+
       {/* bank-style account header */}
-      <section className="rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-5 text-white shadow-lg">
+      {!loan.voided && <section className="rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-5 text-white shadow-lg">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-sm text-white/75">{t('loanx.payoffToday')}</div>
@@ -82,7 +91,7 @@ export default function LoanAccount({ params }) {
         </div>
         {!p.closed && loan.installmentPaise > 0 && !ins.plan.feasible && <p className="mt-3 rounded-xl bg-white/15 p-2 text-sm font-semibold">{t('err.installment_too_low')}</p>}
         {!p.closed && !loan.installmentPaise && <p className="mt-3 rounded-xl bg-white/15 p-2 text-sm">{t('loanx.noInstallment')}</p>}
-      </section>
+      </section>}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={t('loans.terms')} icon="file">
@@ -104,9 +113,9 @@ export default function LoanAccount({ params }) {
         </Card>
       </div>
 
-      {!p.closed && <RepaymentForm loan={loan} onSaved={() => done(t('loans.repaymentSaved'))} />}
+      {!p.closed && !loan.voided && <RepaymentForm loan={loan} onSaved={() => done(t('loans.repaymentSaved'))} />}
 
-      {!p.closed && ins.plan.feasible && ins.plan.rows?.length > 0 && (
+      {!p.closed && !loan.voided && ins.plan.feasible && ins.plan.rows?.length > 0 && (
         <Card title={t('loanx.futurePlan')} icon="calendar">
           <p className="mb-3 text-sm text-muted">{t('loanx.futurePlanHint', { amount: money(loan.installmentPaise) })}</p>
           <ScheduleTable rows={ins.plan.rows} />

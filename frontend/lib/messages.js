@@ -1292,4 +1292,9 @@ export const messages = {
   "err.moved_entry": ["यह टॉप-अप की एंट्री है — टॉप-अप कर्ज़ रद्द करने से ही हटेगी।", "This is a top-up entry — it goes only by cancelling the top-up loan."],
   "err.loan_changed": ["इसी बीच इस कर्ज़ में बदलाव हुआ — फिर से देखें।", "This loan changed meanwhile — please check again."],
   "audit.loan_topped_up": ["कर्ज़ टॉप-अप किया (पुराना बंद, नया बना)", "Loan topped up (old closed, new made)"],
+  "member.paidButLoanLeft": ["इस महीने का सब जमा ✓ · कर्ज़ अभी {{amount}} चुकाना बाकी", "This month is paid ✓ · Loan still to repay: {{amount}}"],
+  "member.loansRepaid": ["आपके सारे कर्ज़ चुक गए हैं।", "All your loans are repaid."],
+  "loans.cancelledBadge": ["रद्द एंट्री", "Cancelled entry"],
+  "loans.cancelledTitle": ["यह कर्ज़ की एंट्री रद्द है", "This loan entry is cancelled"],
+  "loans.cancelledText": ["यह किसी हिसाब में नहीं गिना जाता — न सदस्य के बकाया में, न समिति के नकद में। नीचे की रकमें सिर्फ़ रिकॉर्ड के लिए हैं।", "It is not counted anywhere — not in the member's dues, not in the samiti's cash. The figures below are kept only as a record."],
 };

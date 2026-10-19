@@ -163,6 +163,9 @@ export function memberHome(member) {
     earlierArrears: st.earlierArrears,
     hasLoans: st.hasLoans,
     loanTotals: st.loanTotals,
+    // only loans still being repaid (closed and topped-up loans left out), for progress and "still to repay"
+    runningLoans: sumLoans(st.loans.filter((p) => !p.closed)),
+    runningLoanCount: st.loans.filter((p) => !p.closed).length,
   };
 }
 
