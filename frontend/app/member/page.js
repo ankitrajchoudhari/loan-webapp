@@ -1,56 +1,45 @@
 'use client';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import { ErrorBox, Loading, StatusBadge } from '@/components/ui';
+import { ErrorBox, Loading } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { useApi } from '@/lib/hooks';
 import { fmtDate, money } from '@/lib/format';
 
-/** One compact line: label left, value right. */
-function Line({ label, value, tone, strong }) {
-  const color = tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : tone === 'bad' ? 'text-bad' : 'text-ink';
+/** Thin progress ring: how much of the loan principal is repaid. */
+function Ring({ pct, size = 76 }) {
+  const r = 30;
+  const c = 2 * Math.PI * r;
   return (
-    <div className={`flex items-center justify-between gap-3 py-1 ${strong ? 'mt-1 border-t-2 border-dashed border-line pt-2' : ''}`}>
-      <span className={strong ? 'font-semibold' : 'text-muted'}>{label}</span>
-      <span className={`num text-right font-bold ${strong ? 'text-lg' : ''} ${color}`}>{value}</span>
+    <svg viewBox="0 0 76 76" width={size} height={size} className="shrink-0" aria-hidden>
+      <circle cx="38" cy="38" r={r} fill="none" stroke="var(--color-paper)" strokeWidth="7" />
+      <circle cx="38" cy="38" r={r} fill="none" stroke="var(--color-brand)" strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(100, Math.max(0, pct)) / 100)} transform="rotate(-90 38 38)" />
+      <text x="38" y="42" textAnchor="middle" className="num" fontSize="15" fontWeight="700" fill="var(--color-ink)">{pct}%</text>
+    </svg>
+  );
+}
+
+/** This month at a glance: one tile per obligation (installment, loan EMI). */
+function MonthTile({ icon, label, paid, amount, sub }) {
+  return (
+    <div className="surface flex flex-col gap-2 p-3.5">
+      <div className="flex items-center justify-between">
+        <span className="grid size-8 place-items-center rounded-xl bg-paper text-maroon"><Icon name={icon} className="size-4.5" /></span>
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.7rem] font-bold ${paid ? 'bg-ok-bg text-ok' : 'bg-bad-bg text-bad'}`}>
+          <span className={`size-1.5 rounded-full ${paid ? 'bg-ok' : 'bg-bad'}`} />{paid ? '✓' : '!'}
+        </span>
+      </div>
+      <div>
+        <div className="text-xs text-muted">{label}</div>
+        <div className={`num text-lg font-bold leading-tight ${paid ? 'text-ink' : 'text-bad'}`}>{amount}</div>
+        {sub && <div className="mt-0.5 text-[0.7rem] text-muted">{sub}</div>}
+      </div>
     </div>
   );
 }
 
-function Box({ icon, title, aside, children }) {
-  return (
-    <section className="rounded-2xl border border-line bg-white px-4 py-3 shadow-[0_1px_3px_rgba(60,30,0,.05)]">
-      <h2 className="mb-1.5 flex items-center gap-2 font-bold text-maroon">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-dark"><Icon name={icon} className="size-4.5" /></span>
-        <span className="min-w-0 truncate">{title}</span>
-        {aside && (typeof aside === 'string'
-          ? <span className="ml-auto rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-ok">{aside}</span>
-          : <span className="ml-auto shrink-0">{aside}</span>)}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Bar({ pct, tone = 'ok' }) {
-  return (
-    <div className="h-2.5 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-      <div className={`h-full rounded-full transition-all ${tone === 'ok' ? 'bg-ok' : 'bg-brand'}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-    </div>
-  );
-}
-
-function Tile({ href, icon, label, tone = 'brand' }) {
-  const tones = { brand: 'bg-brand-50 text-brand-dark', ok: 'bg-ok-bg text-ok', maroon: 'bg-maroon/10 text-maroon' };
-  return (
-    <Link href={href} className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-white px-2 py-3 text-center shadow-[0_1px_3px_rgba(60,30,0,.05)] transition hover:border-brand/50 active:scale-[.98]">
-      <span className={`grid size-11 place-items-center rounded-xl ${tones[tone]}`}><Icon name={icon} className="size-6" /></span>
-      <span className="text-sm font-semibold leading-tight">{label}</span>
-    </Link>
-  );
-}
-
-/** Member home: profile card, this month, loan, loan application, quick links — sized for a phone. */
+/** Member home: balance card, this month, the loan, membership — calm and clear on a phone. */
 export default function MemberHome() {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useApi('/statements/me/home');
@@ -61,139 +50,139 @@ export default function MemberHome() {
   if (loading || !data) return <Loading />;
   const { member, installment: inst, hasLoans, loanTotals, earlierArrears } = data;
   const pending = inst.pendingPaise + earlierArrears.amountPaise;
-  const paidPct = inst.duePaise ? Math.round((inst.paidPaise * 100) / inst.duePaise) : 100;
-  // progress and "still to repay" use only loans being repaid now (a closed or topped-up loan is left out)
+  const owed = data.pay?.payablePaise ?? pending;
+  const fee = data.pay?.feePaise ?? 0;
+  const credit = data.pay?.creditPaise ?? 0;
   const running = data.runningLoans ?? loanTotals;
   const hasRunning = (data.runningLoanCount ?? (hasLoans ? 1 : 0)) > 0 && running.totalOutstandingPaise > 0;
   const loanPct = running?.principalPaise ? Math.floor((running.principalPaidPaise * 100) / running.principalPaise) : 0;
-  const credit = data.pay?.creditPaise ?? 0;
-  // everything owed now: installments AND loan dues (after any advance) — the same figure the Pay page asks for
-  const owed = data.pay?.payablePaise ?? pending;
+  const emiDue = data.loanStatus?.dueNowPaise ?? 0;
+  const payoff = data.loanStatus?.payoff;
+  const first = member.fullName.trim().split(/\s+/)[0];
 
   return (
-    <div className="space-y-3">
-      {/* profile card */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-4 text-white shadow-lg">
-        <div className="pointer-events-none absolute -right-10 -top-12 size-40 rounded-full bg-brand/25" />
-        <div className="relative flex items-center gap-3">
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/15 font-brand text-2xl ring-2 ring-white/30">{member.fullName.trim()[0]?.toUpperCase()}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-white/75">{t('member.namasteShort')}</p>
-            <p className="truncate font-brand text-xl leading-tight" title={member.fullName}>{member.fullName}</p>
-            <p className="num mt-0.5 text-sm text-white/80">{t('field.memberNo')} {member.memberNo} · +91 {member.mobileNumber}</p>
+    <div className="space-y-5 pb-4">
+      {/* balance card */}
+      <section className="hero-card relative overflow-hidden rounded-[1.6rem] p-5 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/12 font-brand text-lg ring-1 ring-white/25">{first[0]?.toUpperCase()}</span>
+            <div className="min-w-0 leading-tight">
+              <div className="text-xs text-white/65">{t('member.namasteShort')}</div>
+              <div className="truncate font-semibold">{member.fullName}</div>
+            </div>
+          </div>
+          <span className="num shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-semibold text-white/85">#{member.memberNo}</span>
+        </div>
+
+        <div className="mt-6">
+          <div className="eyebrow text-gold">{owed > 0 ? t('home.dueNow') : t('home.status')}</div>
+          {owed > 0 ? (
+            <div className="num mt-1 text-[2.6rem] font-extrabold leading-none tracking-tight">{money(owed)}</div>
+          ) : (
+            <div className="mt-1 flex items-center gap-2 text-2xl font-bold"><Icon name="checkCircle" className="size-7 text-gold" />{t('home.allClear')}</div>
+          )}
+          <div className="mt-2 text-sm text-white/70">
+            {hasRunning ? t('home.loanLeftLine', { amount: money(running.totalOutstandingPaise) }) : owed > 0 ? t('home.payToStay') : t('home.thanks')}
           </div>
         </div>
-        <div className="relative mt-3 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-xl bg-white/10 px-3 py-2">
-            <div className="text-white/70">{t('field.monthlyInstallment')}</div>
-            <div className="num text-base font-bold">{money(member.monthlyInstallmentPaise)}</div>
-          </div>
-          <div className="rounded-xl bg-white/10 px-3 py-2">
-            <div className="text-white/70">{t('member.memberSince')}</div>
-            <div className="num text-base font-bold">{fmtDate(member.joinDate)}</div>
-          </div>
+
+        <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+          {owed > 0 ? (
+            <Link href="/member/pay" className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gold px-4 font-bold text-[#3a0c14] shadow-sm transition active:scale-[.98]">
+              <Icon name="wallet" className="size-5" />{t('home.payNow', { amount: money(owed + fee) })}
+            </Link>
+          ) : (
+            <Link href="/member/pay" className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white/12 px-4 font-semibold ring-1 ring-white/20 transition active:scale-[.98]">
+              <Icon name="wallet" className="size-5" />{hasRunning ? t('home.payAhead') : t('home.openPay')}
+            </Link>
+          )}
+          <Link href="/member/history" className="grid min-h-12 w-12 place-items-center rounded-2xl bg-white/12 ring-1 ring-white/20" aria-label={t('member.tileRecords')}>
+            <Icon name="history" className="size-5" />
+          </Link>
         </div>
-        <div className={`relative mt-2 flex items-center gap-2 rounded-xl px-3 py-2 font-bold ${owed > 0 ? 'bg-white text-bad' : hasRunning ? 'bg-white text-warn' : 'bg-ok text-white'}`}>
-          <Icon name={owed > 0 ? 'alert' : hasRunning ? 'clock' : 'checkCircle'} className="size-5 shrink-0" />
-          <span className="flex-1">
-            {owed > 0 ? t('member.dueNow', { amount: money(owed) })
-              : hasRunning ? t('member.paidButLoanLeft', { amount: money(running.totalOutstandingPaise) })
-              : t('member.allPaid')}
-          </span>
-          {credit > 0 && <span className="num rounded-full bg-ok-bg px-2 py-0.5 text-xs text-ok">{t('member.advance', { amount: money(credit) })}</span>}
-        </div>
+        {credit > 0 && <div className="mt-3 text-xs text-gold">{t('member.advance', { amount: money(credit) })}</div>}
       </section>
 
       {/* this month */}
-      <Box icon="calendar" title={t('member.monthInstallment', { month: t(`m${data.month}`), year: data.year })} aside={<StatusBadge status={inst.status} />}>
-        <div className="mb-2 mt-1 flex items-baseline justify-between gap-2">
-          <span className="num text-2xl font-bold">{money(inst.paidPaise)}</span>
-          <span className="num text-sm text-muted">/ {money(inst.duePaise)}</span>
+      <section>
+        <h2 className="eyebrow mb-2 px-1 text-muted">{t('home.thisMonth', { month: t(`m${data.month}`), year: data.year })}</h2>
+        <div className={`grid gap-3 ${hasRunning ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <MonthTile icon="calendar" label={t('home.installment')} paid={pending === 0}
+            amount={pending === 0 ? money(inst.paidPaise || inst.duePaise) : money(pending)}
+            sub={pending === 0 ? t('home.paid') : earlierArrears.months > 0 ? t('home.monthsDue', { n: earlierArrears.months + (inst.pendingPaise > 0 ? 1 : 0) }) : t('home.due')} />
+          {hasRunning && (
+            <MonthTile icon="handCoins" label={t('home.emi')} paid={emiDue === 0}
+              amount={emiDue === 0 ? t('home.paidShort') : money(emiDue)}
+              sub={emiDue === 0 ? t('home.paid') : data.loanStatus?.monthsBehind > 1 ? t('home.emisBehind', { n: data.loanStatus.monthsBehind }) : t('home.due')} />
+          )}
         </div>
-        <Bar pct={paidPct} />
-        {inst.pendingPaise > 0 && <Line label={t('member.thisMonthLeft')} value={money(inst.pendingPaise)} tone="bad" />}
-        {earlierArrears.amountPaise > 0 && (
-          <div className="mt-2 rounded-xl border border-bad/25 bg-bad-bg px-3 py-2 text-bad">
-            <div className="flex items-center justify-between gap-2 font-semibold">
-              <span className="flex items-center gap-1.5"><Icon name="alert" className="size-4.5 shrink-0" />{t('member.earlierPending', { n: earlierArrears.months })}</span>
-              <span className="num">{money(earlierArrears.amountPaise)}</span>
-            </div>
-            {earlierArrears.list?.length > 0 && (
-              <ul className="mt-1 space-y-0.5 text-sm">
-                {earlierArrears.list.slice(0, 4).map((m) => (
-                  <li key={`${m.year}-${m.month}`} className="flex justify-between gap-2">
-                    <span>{t(`m${m.month}`)} {m.year}{m.partial ? ` (${t('status.partial')})` : ''}</span>
-                    <span className="num">{money(m.pendingPaise)}</span>
-                  </li>
-                ))}
-                {earlierArrears.list.length > 4 && <li className="text-xs">{t('member.andMore', { n: earlierArrears.list.length - 4 })}</li>}
-              </ul>
-            )}
-          </div>
+        {earlierArrears.months > 0 && (
+          <p className="mt-2 px-1 text-xs text-bad">
+            {t('home.earlier', { list: (earlierArrears.list ?? []).slice(0, 3).map((m) => `${t(`m${m.month}`)} ${m.year}`).join(', ') + ((earlierArrears.list?.length ?? 0) > 3 ? '…' : '') })}
+          </p>
         )}
-        {data.pay?.payablePaise > 0 && (
-          <Link href="/member/pay" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-ok px-4 py-3 text-lg font-bold text-white shadow hover:brightness-95 active:scale-[.99]">
-            <Icon name="wallet" className="size-5" />{t('pay.payNow', { amount: money(data.pay.payablePaise + (data.pay.feePaise ?? 0)) })}
-          </Link>
-        )}
-        {data.pay?.payablePaise > 0 && data.pay.feePaise > 0 && (
-          <p className="mt-1 text-center text-xs text-muted">{t('pay.feeNote', { dues: money(data.pay.payablePaise), fee: money(data.pay.feePaise) })}</p>
-        )}
-      </Box>
+      </section>
 
       {/* loan */}
       {hasRunning ? (
-        <Box icon="handCoins" title={t('stmt.loanTitle')}
-          aside={data.loanStatus?.payoff && !data.loanStatus.overduePaise ? t('member.loanEnds', { month: t(`m${data.loanStatus.payoff.month}`), year: data.loanStatus.payoff.year }) : null}>
-          <div className="mb-1 mt-1 flex items-baseline justify-between text-sm">
-            <span className="text-muted">{t('member.loanRepaid', { pct: loanPct })}</span>
-            <span className="num text-muted">{money(running.principalPaidPaise)} / {money(running.principalPaise)}</span>
+        <section className="surface overflow-hidden">
+          <div className="flex items-center gap-4 p-4">
+            <Ring pct={loanPct} />
+            <div className="min-w-0 flex-1">
+              <div className="eyebrow text-muted">{t('home.loan')}</div>
+              <div className="num mt-0.5 text-2xl font-extrabold leading-tight">{money(running.totalOutstandingPaise)}</div>
+              <div className="num text-xs text-muted">{t('home.ofTotal', { paid: money(running.principalPaidPaise), total: money(running.principalPaise) })}</div>
+              {payoff && <div className="mt-1 text-xs font-semibold text-brand-dark">{t('home.endsIn', { month: t(`m${payoff.month}`), year: payoff.year })}</div>}
+            </div>
           </div>
-          <Bar pct={loanPct} tone="brand" />
-          <Line label={t('member.loanLeft')} value={money(running.principalOutstandingPaise)} tone="warn" />
-          <Line label={t('member.interestLeft')} value={money(Math.max(0, running.interestOutstandingPaise))} tone="warn" />
-          <Line label={t('label.totalOutstanding')} value={money(running.totalOutstandingPaise)} tone="bad" strong />
           {data.loanStatus?.overduePaise > 0 && (
-            <p className="mt-1 rounded-lg bg-bad-bg px-2 py-1 text-sm font-semibold text-bad">{t('member.loanOverdue', { amount: money(data.loanStatus.overduePaise), n: data.loanStatus.monthsBehind })}</p>
+            <div className="mx-4 mb-3 rounded-xl bg-bad-bg px-3 py-2 text-xs font-semibold text-bad">{t('member.loanOverdue', { amount: money(data.loanStatus.overduePaise), n: data.loanStatus.monthsBehind })}</div>
           )}
-          <div className="mt-2.5 flex gap-2">
-            <Link href="/member/pay?loan=emi" className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-bold shadow-sm active:scale-[.98] ${data.loanStatus?.dueNowPaise > 0 ? 'bg-ok text-white' : 'border border-line bg-white text-maroon'}`}>
-              <Icon name="wallet" className="size-4" />
-              {data.loanStatus?.dueNowPaise > 0 ? t('member.payEmiBtn', { amount: money(data.loanStatus.dueNowPaise) }) : t('member.payLoanBtn')}
-            </Link>
+          <div className="grid grid-cols-3 divide-x divide-line border-t border-line text-center text-sm font-semibold">
+            <Link href="/member/pay?loan=emi" className={`flex flex-col items-center gap-1 py-3 ${emiDue > 0 ? 'text-ok' : 'text-maroon'}`}><Icon name="wallet" className="size-5" />{t('home.actEmi')}</Link>
+            <Link href="/member/pay?loan=ahead" className="flex flex-col items-center gap-1 py-3 text-maroon"><Icon name="clock" className="size-5" />{t('home.actAhead')}</Link>
+            <Link href="/member/pay?loan=settle" className="flex flex-col items-center gap-1 py-3 text-maroon"><Icon name="checkCircle" className="size-5" />{t('home.actSettle')}</Link>
           </div>
-        </Box>
+        </section>
       ) : (
-        <p className="flex items-center justify-center gap-2 rounded-2xl bg-ok-bg px-4 py-3 text-center font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{hasLoans ? t('member.loansRepaid') : t('member.noLoan')}</p>
+        <section className="surface flex items-center gap-3 p-4">
+          <span className="grid size-10 place-items-center rounded-xl bg-ok-bg text-ok"><Icon name="checkCircle" className="size-5" /></span>
+          <div className="text-sm font-semibold">{hasLoans ? t('member.loansRepaid') : t('member.noLoan')}</div>
+        </section>
       )}
 
-      {/* loan application */}
-      {app && app.status !== 'rejected' ? (
-        <Link href="/member/loan" className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-3 hover:shadow-md ${app.status === 'approved' ? 'border-ok/30 bg-ok-bg text-ok' : 'border-warn/30 bg-warn-bg text-warn'}`}>
-          <Icon name={app.status === 'approved' ? 'checkCircle' : 'clock'} className="size-7 shrink-0" />
+      {/* loan application in progress */}
+      {app && app.status !== 'rejected' && (
+        <Link href="/member/loan" className="surface flex items-center gap-3 p-4">
+          <span className={`grid size-10 place-items-center rounded-xl ${app.status === 'approved' ? 'bg-ok-bg text-ok' : 'bg-warn-bg text-warn'}`}><Icon name={app.status === 'approved' ? 'checkCircle' : 'clock'} className="size-5" /></span>
           <span className="min-w-0 flex-1">
-            <span className="block font-bold">{t(app.status === 'approved' ? 'apply.homeApproved' : 'apply.homePending', { amount: money(app.amountPaise) })}</span>
-            <span className="block text-sm">{t('apply.homeSee')}</span>
+            <span className="block text-sm font-semibold">{t(app.status === 'approved' ? 'apply.homeApproved' : 'apply.homePending', { amount: money(app.amountPaise) })}</span>
+            <span className="block text-xs text-muted">{t('apply.homeSee')}</span>
           </span>
-          <Icon name="chevronRight" className="size-5 shrink-0" />
-        </Link>
-      ) : (
-        <Link href="/member/loan" className="flex items-center gap-3 rounded-2xl border-2 border-brand/40 bg-white px-4 py-3 text-maroon shadow-sm hover:bg-brand-50">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand text-white"><Icon name="handCoins" className="size-6" /></span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-lg font-bold leading-tight">{t('apply.homeButton')}</span>
-            <span className="block text-sm text-muted">{app?.status === 'rejected' ? t('apply.homeRejected') : t('apply.homeButtonSub')}</span>
-          </span>
-          <Icon name="chevronRight" className="size-5 shrink-0" />
+          <Icon name="chevronRight" className="size-5 text-muted" />
         </Link>
       )}
 
-      {/* quick links */}
-      <div className="grid grid-cols-3 gap-2">
-        <Tile href="/member/month" icon="file" label={t('member.tileStatement')} tone="maroon" />
-        <Tile href="/member/history" icon="history" label={t('member.tileRecords')} />
-        <Tile href="/member/pay" icon="receipt" label={t('member.tileReceipts')} tone="ok" />
-      </div>
+      {/* membership + shortcuts */}
+      <section className="surface divide-y divide-line">
+        <div className="grid grid-cols-2 divide-x divide-line">
+          <div className="p-4"><div className="text-xs text-muted">{t('field.monthlyInstallment')}</div><div className="num font-bold">{money(member.monthlyInstallmentPaise)}</div></div>
+          <div className="p-4"><div className="text-xs text-muted">{t('member.memberSince')}</div><div className="num font-bold">{fmtDate(member.joinDate)}</div></div>
+        </div>
+        {[
+          ['/member/month', 'file', t('member.tileStatement')],
+          ['/member/history', 'history', t('member.tileRecords')],
+          ['/member/pay', 'receipt', t('member.tileReceipts')],
+          ...(!(app && app.status !== 'rejected') ? [['/member/loan', 'handCoins', t('apply.homeButton')]] : []),
+        ].map(([href, icon, label]) => (
+          <Link key={href + label} href={href} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-paper/60">
+            <Icon name={icon} className="size-5 text-maroon" />
+            <span className="flex-1 text-sm font-semibold">{label}</span>
+            <Icon name="chevronRight" className="size-4 text-muted" />
+          </Link>
+        ))}
+      </section>
     </div>
   );
 }

@@ -121,7 +121,8 @@ function NewPayment({ data, onCreated }) {
     if (sel) return;
     const q = new URLSearchParams(window.location.search);
     const firstOf = (prefix) => options.find((o) => o.key.startsWith(prefix))?.key;
-    const want = q.get('loan') ? (firstOf('emi-') || firstOf('ahead-') || firstOf('settle-')) : null;
+    const ask = q.get('loan');
+    const want = ask === 'settle' ? firstOf('settle-') : ask === 'ahead' ? (firstOf('ahead-') || firstOf('settle-')) : ask ? (firstOf('emi-') || firstOf('ahead-') || firstOf('settle-')) : null;
     setSel(want || (byKey.inst && 'inst') || firstOf('emi-') || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -145,28 +146,27 @@ function NewPayment({ data, onCreated }) {
     <div className="space-y-5 pb-36">
       {/* summary */}
       {dues.payablePaise > 0 ? (
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-5 text-white shadow-lg">
-          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-brand/25" />
-          <p className="relative text-sm text-white/75">{t('pay.dueNowTitle')}</p>
-          <p className="num relative mt-0.5 text-4xl font-extrabold tracking-tight">{money(dues.payablePaise)}</p>
-          <div className="relative mt-3 flex flex-wrap gap-2 text-sm">
-            {instNet > 0 && <span className="rounded-full bg-white/15 px-3 py-1">{t('pay.chipInst', { amount: money(instNet) })}</span>}
-            {loanDue > 0 && <span className="rounded-full bg-white/15 px-3 py-1">{t('pay.chipEmi', { amount: money(loanDue) })}</span>}
-            {credit > 0 && <span className="rounded-full bg-ok/80 px-3 py-1">{t('pay.chipCredit', { amount: money(credit) })}</span>}
+        <section className="hero-card relative overflow-hidden rounded-[1.6rem] p-5 text-white">
+          <p className="eyebrow text-gold">{t('pay.dueNowTitle')}</p>
+          <p className="num mt-1 text-[2.4rem] font-extrabold leading-none tracking-tight">{money(dues.payablePaise)}</p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+            {instNet > 0 && <span className="rounded-full bg-white/12 px-3 py-1 ring-1 ring-white/15">{t('pay.chipInst', { amount: money(instNet) })}</span>}
+            {loanDue > 0 && <span className="rounded-full bg-white/12 px-3 py-1 ring-1 ring-white/15">{t('pay.chipEmi', { amount: money(loanDue) })}</span>}
+            {credit > 0 && <span className="rounded-full bg-gold px-3 py-1 text-[#3a0c14]">{t('pay.chipCredit', { amount: money(credit) })}</span>}
           </div>
         </section>
       ) : (
-        <section className="flex items-center gap-4 rounded-3xl border border-ok/25 bg-ok-bg p-5">
+        <section className="surface flex items-center gap-4 p-5">
           <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-ok text-white"><Icon name="check" className="size-7" strokeWidth={3} /></span>
           <div>
-            <p className="text-lg font-bold text-ok">{t('pay.upToDate')}</p>
-            <p className="text-sm text-ok/90">{loanLeft > 0 ? t('pay.upToDateLoan', { amount: money(loanLeft) }) : t('pay.upToDateNoLoan')}</p>
+            <p className="text-lg font-bold">{t('pay.upToDate')}</p>
+            <p className="text-sm text-muted">{loanLeft > 0 ? t('pay.upToDateLoan', { amount: money(loanLeft) }) : t('pay.upToDateNoLoan')}</p>
           </div>
         </section>
       )}
 
       <div>
-        <h2 className="mb-2 px-1 text-sm font-bold uppercase tracking-wide text-muted">{t('pay.whatToPay')}</h2>
+        <h2 className="eyebrow mb-2 px-1 text-muted">{t('pay.whatToPay')}</h2>
         <div className="space-y-2.5" role="radiogroup" aria-label={t('pay.whatToPay')}>
           {/* installment */}
           {instNet > 0 ? (
@@ -183,15 +183,15 @@ function NewPayment({ data, onCreated }) {
             const n = ahead[l.loanId] ?? 1;
             const maxN = l.installmentPaise ? Math.max(1, Math.ceil(l.payoffPaise / l.installmentPaise)) : 1;
             return (
-              <div key={l.loanId} className="overflow-hidden rounded-3xl border border-line bg-white shadow-[0_1px_3px_rgba(60,30,0,.05)]">
-                <div className="flex items-center gap-3 border-b border-line bg-stone-50/70 px-4 py-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-dark"><Icon name="handCoins" className="size-5" /></span>
+              <div key={l.loanId} className="surface overflow-hidden">
+                <div className="flex items-center gap-3 border-b border-line px-4 py-3.5">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-paper text-maroon"><Icon name="handCoins" className="size-5" /></span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-bold">{t('pay.loanTitle', { n: l.loanNo })}</span>
                       <span className="num text-sm font-semibold text-muted">{t('pay.leftShort', { amount: money(l.payoffPaise) })}</span>
                     </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-200"><div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} /></div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-paper"><div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} /></div>
                     <div className="mt-1 text-xs text-muted">{t('pay.repaidPct', { pct })}{l.installmentPaise ? ` · ${t('pay.emiIs', { amount: money(l.installmentPaise) })}` : ''}</div>
                   </div>
                 </div>
@@ -237,19 +237,23 @@ function NewPayment({ data, onCreated }) {
       {/* checkout */}
       {chosen && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-3 pb-2">
-          <div className="mx-auto max-w-lg rounded-3xl border border-line bg-white/95 p-3 shadow-[0_-6px_24px_rgba(60,30,0,.14)] backdrop-blur">
-            <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
-              <span className="min-w-0 truncate text-sm font-semibold text-muted">{chosen.label}</span>
+          <div className="hero-card mx-auto max-w-lg rounded-[1.4rem] p-3 text-white">
+            <div className="mb-2.5 flex items-baseline justify-between gap-2 px-1">
+              <span className="min-w-0 truncate text-sm text-white/75">{chosen.label}</span>
               <span className="num shrink-0 text-xl font-extrabold">{money(chosen.amountPaise + feePaise)}</span>
             </div>
-            {feePaise > 0 && <p className="-mt-1.5 mb-2 px-1 text-right text-xs text-muted">{t('pay.feeNote', { dues: money(chosen.amountPaise), fee: money(feePaise) })}</p>}
+            {feePaise > 0 && <p className="-mt-2 mb-2 px-1 text-right text-xs text-white/60">{t('pay.feeNote', { dues: money(chosen.amountPaise), fee: money(feePaise) })}</p>}
             <div className="grid grid-cols-[1fr_auto] gap-2">
               {data.upi ? (
-                <Button variant="success" icon="wallet" loading={busy} onClick={() => start('upi')}>{t('pay.byUpiShort')}</Button>
+                <button type="button" disabled={busy} onClick={() => start('upi')} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gold px-4 font-bold text-[#3a0c14] transition active:scale-[.98] disabled:opacity-60">
+                  <Icon name="wallet" className="size-5" />{busy ? '...' : t('pay.byUpiShort')}
+                </button>
               ) : (
-                <span className="flex items-center rounded-xl bg-stone-100 px-3 text-xs text-muted">{t('pay.upiNotSet')}</span>
+                <span className="flex items-center rounded-2xl bg-white/10 px-3 text-xs text-white/70">{t('pay.upiNotSet')}</span>
               )}
-              <Button variant="secondary" icon="handCoins" disabled={busy} onClick={() => start('cash')}>{t('pay.cashShort')}</Button>
+              <button type="button" disabled={busy} onClick={() => start('cash')} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white/12 px-4 font-semibold ring-1 ring-white/20 transition active:scale-[.98] disabled:opacity-60">
+                <Icon name="handCoins" className="size-5" />{t('pay.cashShort')}
+              </button>
             </div>
           </div>
         </div>
@@ -263,12 +267,12 @@ function Choice({ selected, onSelect, icon, title, sub, amount, tone, extra, fla
   return (
     <div role="radio" aria-checked={selected} tabIndex={0} onClick={onSelect} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect())}
       className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 px-3 py-3 transition active:scale-[.99] ${
-        selected ? 'border-maroon bg-maroon/[.04] shadow-[0_0_0_4px_rgba(122,31,43,.08)]' : `${flat ? 'border-transparent bg-stone-50 hover:border-line' : 'border-line bg-white hover:border-brand/40'}`
+        selected ? 'border-maroon bg-maroon/[.035] shadow-[0_0_0_4px_rgba(122,31,43,.07)]' : `${flat ? 'border-transparent bg-paper/55 hover:border-line' : 'surface border-transparent hover:border-line'}`
       }`}>
       <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 ${selected ? 'border-maroon' : 'border-stone-300'}`}>
         {selected && <span className="size-2.5 rounded-full bg-maroon" />}
       </span>
-      <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${selected ? 'bg-maroon text-white' : 'bg-white text-brand-dark ring-1 ring-line'}`}><Icon name={icon} className="size-4.5" /></span>
+      <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${selected ? 'bg-maroon text-white' : 'bg-white text-maroon ring-1 ring-line'}`}><Icon name={icon} className="size-4.5" /></span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold leading-tight">{title}</span>
         {sub && <span className="mt-0.5 block truncate text-xs text-muted">{sub}</span>}
@@ -282,7 +286,7 @@ function Choice({ selected, onSelect, icon, title, sub, amount, tone, extra, fla
 /** A row that is already paid — shown so the member sees it, but not tappable. */
 function Done({ icon, title, sub, flat }) {
   return (
-    <div className={`flex items-center gap-3 rounded-2xl px-3 py-3 ${flat ? 'bg-ok-bg/60' : 'border border-ok/20 bg-ok-bg/60'}`}>
+    <div className={`flex items-center gap-3 rounded-2xl px-3 py-3 ${flat ? 'bg-ok-bg/50' : 'surface'}`}>
       <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok text-white"><Icon name="check" className="size-3.5" strokeWidth={3} /></span>
       <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-ok ring-1 ring-ok/20"><Icon name={icon} className="size-4.5" /></span>
       <span className="min-w-0 flex-1">
