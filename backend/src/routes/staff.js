@@ -70,6 +70,16 @@ router.put('/:id', async (req, res) => {
   res.json({ staff: staffPublic(s) });
 });
 
+/** Clears a login lock (5 wrong tries) at once instead of waiting 15 minutes. */
+router.post('/:id/unlock', async (req, res) => {
+  const db = liveDb();
+  const s = await db.adminUser.findUnique({ where: { id: req.params.id } });
+  if (!s) throw new HttpError(404, 'not_found');
+  await db.adminUser.update({ where: { id: s.id }, data: { failedLogins: 0, lockedUntil: null } });
+  await audit(req, { action: 'login_unlocked', entity: 'admin', entityId: s.id, after: { name: s.name } });
+  res.json({ ok: true });
+});
+
 router.post('/:id/status', async (req, res) => {
   const body = validate(z.object({ status: z.enum(['active', 'inactive']) }), req.body);
   const db = liveDb();

@@ -44,6 +44,7 @@ export function publicMember(m) {
     note: m.note ?? null,
     dateOfBirth: iso(m.dateOfBirth),
     creditPaise: m.creditPaise ?? 0,
+    lockedUntil: m.lockedUntil && m.lockedUntil > new Date() ? m.lockedUntil : null,
   };
 }
 

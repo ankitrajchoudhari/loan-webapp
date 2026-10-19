@@ -47,6 +47,7 @@ export default function Team() {
                 <span className="text-lg font-semibold">{s.name}</span>
                 <Badge tone={ROLE_TONE[s.role]}>{t(`role.${s.role}`)}</Badge>
                 {s.status !== 'active' && <Badge>{t('member.inactive')}</Badge>}
+                {s.lockedUntil && <Badge tone="bad" icon="lock">{t('team.locked', { time: fmtDateTime(s.lockedUntil) })}</Badge>}
               </div>
               <div className="num text-sm text-muted">
                 {s.mobileNumber ?? '—'} · {t('field.dateOfBirth')} {fmtDate(s.dateOfBirth)}{s.email ? ` · ${s.email}` : ''}
@@ -60,6 +61,7 @@ export default function Team() {
               <div className="mt-1 text-xs text-muted">{t('team.lastLogin')}: {s.lastLogin ? fmtDateTime(s.lastLogin) : '—'}</div>
               {mine && (
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {s.lockedUntil && <Button size="sm" variant="success" icon="lock" onClick={async () => { await api(`/staff/${s.id}/unlock`, { method: 'POST', body: {} }); toast(t('team.unlocked')); reload(); }}>{t('team.unlock')}</Button>}
                   <Button size="sm" variant="secondary" icon="edit" onClick={() => setEdit(s)}>{t('team.edit')}</Button>
                   <Button size="sm" variant="ghost" icon={s.status === 'active' ? 'x' : 'check'} onClick={() => toggle(s)}>
                     {s.status === 'active' ? t('team.turnOff') : t('team.turnOn')}

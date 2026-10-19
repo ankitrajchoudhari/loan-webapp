@@ -11,7 +11,7 @@ import { ChangeHistory, ReasonModal } from '@/components/admin';
 import { useToast } from '@/app/providers';
 import { useApi } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { fmtDate, money, nowMonthYear } from '@/lib/format';
+import { fmtDate, fmtDateTime, money, nowMonthYear } from '@/lib/format';
 
 const TABS = ['month', 'old', 'entries', 'loans', 'changes'];
 
@@ -58,6 +58,12 @@ export default function MemberAccount({ params }) {
           <Row label={t('field.dateOfBirth')} value={m.dateOfBirth ? fmtDate(m.dateOfBirth) : <span className="text-bad">{t('members.dobMissing')}</span>} />
         </div>
         {m.note && <p className="mt-3 text-muted">{m.note}</p>}
+        {m.lockedUntil && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-bad-bg px-3 py-2 text-sm font-semibold text-bad">
+            <span className="flex-1">{t('team.locked', { time: fmtDateTime(m.lockedUntil) })} — {t('members.lockedHint')}</span>
+            <Button size="sm" variant="success" icon="lock" onClick={async () => { await api(`/members/${id}/unlock`, { method: 'POST', body: {} }); toast(t('team.unlocked')); member.reload(); }}>{t('team.unlock')}</Button>
+          </div>
+        )}
         {member.data?.sharedWith?.length > 0 && (
           <div className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm">
             <span className="font-semibold text-brand-dark">{t('members.sameNumberAs')} </span>

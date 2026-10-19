@@ -210,6 +210,14 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   res.json({ deleted: true, counts, mobileAvailableFrom: availableAt.toISOString().slice(0, 10) });
 });
 
+/** Clears a member's login lock (5 wrong dates of birth) at once. */
+router.post('/:id/unlock', requireAdmin, async (req, res) => {
+  const m = await prisma.member.update({ where: { id: req.params.id }, data: { failedLogins: 0, lockedUntil: null } }).catch(() => null);
+  if (!m) throw new HttpError(404, 'member_not_found');
+  await audit(req, { action: 'login_unlocked', entity: 'member', entityId: m.id, memberId: m.id });
+  res.json({ ok: true });
+});
+
 /** Change history for one member's account (all entities). */
 router.get('/:id/changes', requireAdmin, async (req, res) => {
   const entries = await prisma.auditLog.findMany({ where: { memberId: req.params.id }, orderBy: { at: 'desc' }, take: 200 });

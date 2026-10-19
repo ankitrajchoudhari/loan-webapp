@@ -48,7 +48,11 @@ export function errorText(t, err) {
   if (field && i18n.exists(`err.${field}`)) return t(`err.${field}`);
   const key = `err.${err.code}`;
   const params = err.details && !Array.isArray(err.details) ? err.details : undefined;
-  return i18n.exists(key) ? t(key, params) : t('err.generic');
+  if (!i18n.exists(key)) return t('err.generic');
+  if (err.code === 'locked') return t(key, { minutes: params?.minutes ?? 15 });
+  const text = t(key, params);
+  // wrong login: say how many tries are left before the 15-minute lock
+  return params?.left != null ? `${text} ${t('err.triesLeft', { count: params.left, n: params.left })}` : text;
 }
 
 export default i18n;

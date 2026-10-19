@@ -36,6 +36,7 @@ export function staffPublic(s) {
     duty: s.duty ?? null,
     status: s.status,
     lastLogin: s.lastLogin,
+    lockedUntil: s.lockedUntil && s.lockedUntil > new Date() ? s.lockedUntil : null,
     createdAt: s.createdAt,
   };
 }

@@ -782,3 +782,21 @@ test('an unpaid payment follows the dues: admin enters an installment → the op
   }
   assert.equal((await m('GET', `/pay/${all.data.payment.id}`, undefined, { expect: 200 })).data.payment.status, 'cancelled');
 });
+
+test('wrong logins: tries left are shown, the 5th locks with minutes; staff can unlock at once', async () => {
+  const c = await admin('POST', '/members', { fullName: 'लॉक जाँच', mobileNumber: '9878888888', joinDate: dateIn(2, 1), dateOfBirth: '1982-02-02', monthlyInstallmentPaise: '1000' }, { expect: 201 });
+  const v = agent();
+  for (let left = 4; left >= 1; left--) {
+    const r = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09' }, { expect: 401 });
+    assert.equal(r.data.error.details.left, left);
+  }
+  const fifth = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09' }, { expect: 429 });
+  assert.equal(fifth.data.error.code, 'locked');
+  assert.equal(fifth.data.error.details.minutes, 15);
+  const right = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02' }, { expect: 429 }); // even the right DOB waits
+  assert.ok(right.data.error.details.minutes >= 14);
+  const seen = await admin('GET', `/members/${c.data.member.id}`, undefined, { expect: 200 });
+  assert.ok(seen.data.member.lockedUntil, 'admin sees the lock');
+  await admin('POST', `/members/${c.data.member.id}/unlock`, {}, { expect: 200 });
+  await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02' }, { expect: 200 });
+});

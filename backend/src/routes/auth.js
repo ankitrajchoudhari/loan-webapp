@@ -33,15 +33,19 @@ function strangerAttempt(key) {
   if (s.n >= MAX_ATTEMPTS) Object.assign(s, { n: 0, until: Date.now() + LOCK_MS });
   strangers.set(key, s);
 }
+const minutesLeft = (until) => Math.max(1, Math.ceil((new Date(until).getTime() - Date.now()) / 60000));
 async function lockCheck(row) {
-  if (row?.lockedUntil && row.lockedUntil > new Date()) throw new HttpError(429, 'locked');
+  if (row?.lockedUntil && row.lockedUntil > new Date()) throw new HttpError(429, 'locked', { minutes: minutesLeft(row.lockedUntil) });
 }
+/** One more wrong try. Returns the tries left; on the last one the account is locked and 'locked' is thrown. */
 async function recordFail(model, row) {
   const fails = row.failedLogins + 1;
-  await model.update({
-    where: { id: row.id },
-    data: fails >= MAX_ATTEMPTS ? { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MS) } : { failedLogins: fails },
-  });
+  if (fails >= MAX_ATTEMPTS) {
+    await model.update({ where: { id: row.id }, data: { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MS) } });
+    throw new HttpError(429, 'locked', { minutes: LOCK_MS / 60000 });
+  }
+  await model.update({ where: { id: row.id }, data: { failedLogins: fails } });
+  return MAX_ATTEMPTS - fails;
 }
 const sameDay = (stored, given) => {
   try {
@@ -105,16 +109,16 @@ router.post('/login', async (req, res) => {
       ok = Boolean(staff.email) && who.email === staff.email.toLowerCase();
       if (ok && !staff.firebaseUid) await db.adminUser.update({ where: { id: staff.id }, data: { firebaseUid: who.uid } });
       if (!ok) {
-        await recordFail(db.adminUser, staff);
-        throw new HttpError(401, 'gmail_mismatch');
+        const left = await recordFail(db.adminUser, staff);
+        throw new HttpError(401, 'gmail_mismatch', { left });
       }
     } else {
       ok = sameDay(staff.dateOfBirth, body.dateOfBirth);
     }
     if (ok && staff.role !== 'subadmin') ok = secretCodeOk(body.code);
     if (!ok) {
-      await recordFail(db.adminUser, staff);
-      throw new HttpError(401, staff.role === 'subadmin' ? 'member_login_wrong' : 'admin_login_wrong');
+      const left = await recordFail(db.adminUser, staff);
+      throw new HttpError(401, staff.role === 'subadmin' ? 'member_login_wrong' : 'admin_login_wrong', { left });
     }
     await db.adminUser.update({ where: { id: staff.id }, data: { failedLogins: 0, lockedUntil: null, lastLogin: new Date() } });
     req.user = { id: staff.id, role: 'admin', staffRole: staff.role, name: staff.name };
@@ -140,8 +144,8 @@ router.post('/login', async (req, res) => {
   }
   await lockCheck(member);
   if (!sameDay(member.dateOfBirth, body.dateOfBirth)) {
-    await recordFail(prisma.member, member);
-    throw new HttpError(401, 'member_login_wrong');
+    const left = await recordFail(prisma.member, member);
+    throw new HttpError(401, 'member_login_wrong', { left });
   }
   await prisma.member.update({ where: { id: member.id }, data: { failedLogins: 0, lockedUntil: null } });
   const token = issueSession(res, { role: 'member', id: member.id, name: member.fullName, env });
