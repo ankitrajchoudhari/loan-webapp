@@ -800,3 +800,60 @@ test('wrong logins: tries left are shown, the 5th locks with minutes; staff can 
   await admin('POST', `/members/${c.data.member.id}/unlock`, {}, { expect: 200 });
   await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02' }, { expect: 200 });
 });
+
+test('top-up: ₹45,000 loan, 11 × (₹2,000 + ₹225), then ₹25,000 more → one ₹48,000 loan; 8 × (₹2,000 + ₹240) → ₹32,000 left; cash counts only real money', async () => {
+  const c = await admin('POST', '/members', { fullName: 'टॉप-अप जाँच', mobileNumber: '9879999999', joinDate: dateIn(22, 1), dateOfBirth: '1975-07-07', monthlyInstallmentPaise: '1000' }, { expect: 201 });
+  const mid = c.data.member.id;
+  const dash0 = (await admin('GET', '/dashboard', undefined, { expect: 200 })).data;
+
+  // loan 1: taken 20 months ago, flat 0.5% a month = ₹225
+  const l1 = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(20, 10), principalPaise: '45000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '2225' }, { expect: 201 });
+  const L1 = l1.data.loan.id;
+  for (let i = 19; i >= 9; i--) {
+    await admin('POST', `/loans/${L1}/repayments`, { paidOn: dateIn(i, 10), totalPaise: '2225', principalPaise: '2000', interestPaise: '225', method: 'cash' }, { expect: 201 });
+  }
+  // top-up on the 15th of the 11th repayment month
+  const topupDate = dateIn(9, 15);
+  const pre = await admin('POST', `/loans/${L1}/topup?preview=1`, { takenOn: topupDate, extraPaise: '25000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '2240' }, { expect: 200 });
+  assert.equal(pre.data.carriedPrincipalPaise, 2300000, 'old balance ₹23,000');
+  assert.equal(pre.data.carriedInterestPaise, 0, 'all ₹225 interest was paid');
+  assert.equal(pre.data.newPrincipalPaise, 4800000, '₹23,000 + ₹25,000 = ₹48,000');
+  assert.equal(pre.data.firstMonthInterestPaise, 24000, '0.5% of ₹48,000 = ₹240');
+  await admin('POST', `/loans/${L1}/topup`, { takenOn: dateIn(25, 15), extraPaise: '25000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month' }, { expect: 400 }); // before the loan
+  const t = await admin('POST', `/loans/${L1}/topup`, { takenOn: topupDate, extraPaise: '25000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '2240' }, { expect: 201 });
+  const L2 = t.data.loan.id;
+
+  const old = (await admin('GET', `/loans/${L1}`, undefined, { expect: 200 })).data;
+  assert.equal(old.loan.position.totalOutstandingPaise, 0, 'old loan closed');
+  assert.ok(old.loan.position.closed);
+  const moved = old.repayments.find((r) => r.movedToLoanId === L2);
+  assert.equal(moved.principalPaise, 2300000);
+  await admin('POST', `/repayments/${moved.id}/void`, { reason: 'test' }, { expect: 400 }); // only through the top-up loan
+  await admin('POST', `/loans/${L1}/void`, { reason: 'test', withRepayments: true }, { expect: 400 }); // has a top-up
+
+  for (let i = 8; i >= 1; i--) {
+    await admin('POST', `/loans/${L2}/repayments`, { paidOn: dateIn(i, 10), totalPaise: '2240', principalPaise: '2000', interestPaise: '240', method: 'cash' }, { expect: 201 });
+  }
+  const nl = (await admin('GET', `/loans/${L2}`, undefined, { expect: 200 })).data.loan;
+  assert.equal(nl.principalPaise, 4800000);
+  assert.equal(nl.carriedPrincipalPaise, 2300000);
+  assert.equal(nl.position.principalOutstandingPaise, 3200000, '₹32,000 left');
+  assert.equal(nl.position.interestOutstandingPaise, 24000, 'only this month\'s ₹240 is due (all 8 earlier months paid)');
+
+  // cash: out ₹45,000 + ₹25,000 (not ₹48,000); in 19 × ₹2,000 principal + 11 × ₹225 + 8 × ₹240 interest; the ₹23,000 move is neither
+  const dash = (await admin('GET', '/dashboard', undefined, { expect: 200 })).data;
+  assert.equal(dash.loansGivenPaise - dash0.loansGivenPaise, 7000000);
+  assert.equal(dash.principalReturnedPaise - dash0.principalReturnedPaise, 19 * 200000);
+  assert.equal(dash.interestEarnedPaise - dash0.interestEarnedPaise, 11 * 22500 + 8 * 24000);
+  assert.equal(dash.cashInHandPaise - dash0.cashInHandPaise, -7000000 + 19 * 200000 + 11 * 22500 + 8 * 24000);
+  const hist = (await admin('GET', `/statements/${mid}/history`, undefined, { expect: 200 })).data;
+  assert.ok(!hist.deposits.some((d) => d.movedToLoanId), 'the move is not shown as a deposit');
+  assert.equal(hist.totals.principalPaidPaise, 19 * 200000);
+
+  // cancelling the top-up loan gives the old loan its ₹23,000 balance back
+  await admin('POST', `/loans/${L2}/void`, { reason: 'गलत टॉप-अप', withRepayments: true }, { expect: 200 });
+  const back = (await admin('GET', `/loans/${L1}`, undefined, { expect: 200 })).data.loan.position;
+  assert.equal(back.principalOutstandingPaise, 2300000);
+  const dash2 = (await admin('GET', '/dashboard', undefined, { expect: 200 })).data;
+  assert.equal(dash2.loansGivenPaise - dash0.loansGivenPaise, 4500000, 'only the first ₹45,000 is lent now');
+});

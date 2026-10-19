@@ -81,6 +81,8 @@ export function loanRow(l) {
     installmentPaise: l.installmentPaise,
     openingInterestPaise: l.openingInterestPaise,
     termMonths: l.termMonths,
+    topupOfLoanId: l.topupOfLoanId ?? null,
+    carriedPrincipalPaise: l.carriedPrincipalPaise ?? 0,
     note: l.note,
     source: l.source,
     voided: Boolean(l.voidedAt),

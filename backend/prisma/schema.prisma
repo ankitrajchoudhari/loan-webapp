@@ -122,6 +122,9 @@ model Loan {
   openingInterestPaise Int           @default(0) @map("opening_interest_paise")
   /// agreed number of EMIs: interest is charged only for this many months (null = until repaid)
   termMonths          Int?           @map("term_months")
+  /// top-up: the old loan this one replaced, and how much of its principal was carried into this one
+  topupOfLoanId       String?        @map("topup_of_loan_id") @db.Uuid
+  carriedPrincipalPaise Int          @default(0) @map("carried_principal_paise")
   note                String?
   source              EntrySource    @default(entry)
   batchId             String?        @map("batch_id") @db.Uuid
@@ -153,6 +156,9 @@ model LoanRepayment {
   voidReason     String?     @map("void_reason")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  /// set when this entry is not cash but the balance moved into a top-up loan
+  movedToLoanId  String?     @map("moved_to_loan_id") @db.Uuid
 
   loan  Loan          @relation(fields: [loanId], references: [id], onDelete: Restrict)
   batch HistoryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)

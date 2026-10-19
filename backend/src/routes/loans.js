@@ -6,8 +6,9 @@ import { audit, changes } from '../lib/audit.js';
 import { publicMember } from '../lib/ledger.js';
 import { maskActors } from '../lib/notify.js';
 import { loanLedger, loanPosition, checkRepayment, suggestSplit, interestForMonth, repaymentView, loanInsights, emiFor, planNewLoan } from '../lib/loan.js';
+import { moneyField, nextMonth } from '../lib/util.js';
 import {
-  loanEntry, loanTermFields, loanData, checkLoanTerms, loanRow, createLoan,
+  loanEntry, loanTermFields, loanData, checkLoanTerms, loanRow, createLoan, nextLoanNo,
   repaymentFields, createRepayment, positionsAround,
 } from '../lib/loans.js';
 
@@ -113,6 +114,77 @@ loans.get('/:id', async (req, res) => {
   });
 });
 
+/**
+ * Top-up: give more money on a running loan. On the top-up date the old loan's balance (principal,
+ * plus any unpaid interest) moves into a NEW loan = balance + new money; the old loan is closed by a
+ * "moved" entry that is not cash. Interest on the new loan starts the month after the top-up (the
+ * top-up month's interest stays on the old loan, so no month is charged twice). Only the new money
+ * leaves the samiti's cash. ?preview=1 shows the figures without saving.
+ */
+loans.post('/:id/topup', async (req, res) => {
+  const body = validate(z.object({
+    takenOn: loanTermFields.takenOn,
+    extraPaise: moneyField({ min: 100, max: 1_000_000_000 }),
+    interestMethod: loanTermFields.interestMethod,
+    rateBp: loanTermFields.rateBp,
+    ratePeriod: loanTermFields.ratePeriod,
+    fixedInterestPaise: loanTermFields.fixedInterestPaise,
+    installmentPaise: loanTermFields.installmentPaise,
+    termMonths: loanTermFields.termMonths,
+    note: loanTermFields.note,
+  }), req.body);
+  const old = await getLoan(req.params.id);
+  if (old.voidedAt) throw new HttpError(404, 'loan_not_found');
+  if (old.member.status !== 'active') throw new HttpError(400, 'member_inactive');
+  const date = parseDate(body.takenOn);
+  if (iso(date) < iso(old.takenOn)) throw new HttpError(400, 'topup_before_loan');
+  const reps = liveReps(old);
+  if (reps.some((r) => iso(r.paidOn) > iso(date))) throw new HttpError(400, 'repayment_after_topup');
+  const pos = loanPosition(old, reps, ymOfDate(date));
+  if (pos.principalOutstandingPaise <= 0) throw new HttpError(400, 'loan_already_repaid');
+  const carriedPrincipal = pos.principalOutstandingPaise;
+  const carriedInterest = pos.interestOutstandingPaise; // unpaid (or, if negative, paid ahead) interest moves too
+  const from = nextMonth(date.getUTCMonth() + 1, date.getUTCFullYear());
+  const data = loanData({
+    ...body, principalPaise: carriedPrincipal + body.extraPaise, openingInterestPaise: 0,
+    interestFromMonth: from.month, interestFromYear: from.year,
+  });
+  data.openingInterestPaise = carriedInterest;
+  const errors = checkLoanTerms(data);
+  if (errors.length) throw new HttpError(400, errors[0], { errors });
+  const figures = {
+    oldLoanNo: old.loanNo,
+    carriedPrincipalPaise: carriedPrincipal,
+    carriedInterestPaise: carriedInterest,
+    extraPaise: body.extraPaise,
+    newPrincipalPaise: data.principalPaise,
+    firstMonthInterestPaise: interestForMonth(data, data.principalPaise),
+    interestFrom: from,
+    plan: data.installmentPaise > 0 ? planNewLoan(data, data.installmentPaise) : null,
+  };
+  if (req.query.preview === '1') return res.json(figures);
+
+  const created = await prisma.$transaction(async (tx) => {
+    const fresh = await tx.loanRepayment.findMany({ where: { loanId: old.id, voidedAt: null } });
+    if (fresh.length !== reps.length) throw new HttpError(409, 'loan_changed'); // someone added a repayment meanwhile
+    const loan = await tx.loan.create({
+      data: { ...data, memberId: old.memberId, loanNo: await nextLoanNo(tx), source: 'entry', topupOfLoanId: old.id, carriedPrincipalPaise: carriedPrincipal },
+    });
+    await tx.loanRepayment.create({
+      data: {
+        loanId: old.id, paidOn: date, totalPaise: carriedPrincipal + carriedInterest, principalPaise: carriedPrincipal, interestPaise: carriedInterest,
+        method: 'other', note: `नए कर्ज नं. ${loan.loanNo} में जोड़ा (टॉप-अप)`, source: 'entry', movedToLoanId: loan.id,
+      },
+    });
+    await audit(req, {
+      action: 'loan_topped_up', entity: 'loan', entityId: loan.id, memberId: old.memberId, reason: body.note,
+      after: { oldLoanNo: old.loanNo, newLoanNo: loan.loanNo, carriedPrincipalPaise: carriedPrincipal, carriedInterestPaise: carriedInterest, extraPaise: body.extraPaise, newPrincipalPaise: loan.principalPaise, takenOn: iso(date) },
+    }, tx);
+    return loan;
+  });
+  res.status(201).json({ loan: loanRow(created), ...figures });
+});
+
 /** Change loan terms. Reason required; ?preview=1 shows the balances before and after. */
 loans.put('/:id', async (req, res) => {
   const body = validate(z.object({ ...loanTermFields, reason: reasonField }), req.body);
@@ -146,6 +218,7 @@ loans.post('/:id/void', async (req, res) => {
   const body = validate(z.object({ reason: reasonField, withRepayments: z.boolean().optional() }), req.body);
   const loan = await getLoan(req.params.id);
   if (loan.voidedAt) throw new HttpError(404, 'loan_not_found');
+  if (liveReps(loan).some((r) => r.movedToLoanId)) throw new HttpError(400, 'loan_has_topup');
   const reps = liveReps(loan);
   if (reps.length && !body.withRepayments) {
     throw new HttpError(400, 'loan_has_repayments', { count: reps.length, amount: reps.reduce((s, r) => s + r.totalPaise, 0) });
@@ -156,6 +229,10 @@ loans.post('/:id/void', async (req, res) => {
       await tx.loanRepayment.updateMany({ where: { id: { in: reps.map((r) => r.id) } }, data: { voidedAt: now, voidReason: `कर्ज रद्द: ${body.reason}` } });
     }
     await tx.loan.update({ where: { id: loan.id }, data: { voidedAt: now, voidReason: body.reason } });
+    // cancelling a top-up loan: the old loan's balance comes back to it
+    if (loan.topupOfLoanId) {
+      await tx.loanRepayment.updateMany({ where: { loanId: loan.topupOfLoanId, movedToLoanId: loan.id, voidedAt: null }, data: { voidedAt: now, voidReason: `टॉप-अप कर्ज रद्द: ${body.reason}` } });
+    }
     // a loan made from an online application: the application shows it was cancelled
     await tx.loanApplication.updateMany({ where: { loanId: loan.id, status: 'approved' }, data: { status: 'cancelled', rejectReason: body.reason } });
     await audit(req, { action: 'loan_voided', entity: 'loan', entityId: loan.id, memberId: loan.memberId, reason: body.reason, before: loanRow(loan), after: { repaymentsCancelled: reps.length } }, tx);
@@ -198,6 +275,7 @@ repayments.put('/:id', async (req, res) => {
   const body = validate(z.object({ ...repaymentFields, reason: reasonField }), req.body);
   const before = await prisma.loanRepayment.findUnique({ where: { id: req.params.id } });
   if (!before || before.voidedAt) throw new HttpError(404, 'not_found');
+  if (before.movedToLoanId) throw new HttpError(400, 'moved_entry');
   const loan = await getLoan(before.loanId);
   const others = liveReps(loan).filter((r) => r.id !== before.id);
   const draft = { ...body, id: before.id, paidOn: parseDate(body.paidOn) };
@@ -226,6 +304,7 @@ repayments.post('/:id/void', async (req, res) => {
   const body = validate(z.object({ reason: reasonField }), req.body);
   const before = await prisma.loanRepayment.findUnique({ where: { id: req.params.id } });
   if (!before || before.voidedAt) throw new HttpError(404, 'not_found');
+  if (before.movedToLoanId) throw new HttpError(400, 'moved_entry');
   const loan = await getLoan(before.loanId);
   const effect = positionsAround(loan, liveReps(loan), liveReps(loan).filter((r) => r.id !== before.id));
   if (req.query.preview === '1') return res.json(effect);

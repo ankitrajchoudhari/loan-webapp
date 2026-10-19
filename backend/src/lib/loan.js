@@ -57,6 +57,7 @@ export function loanLedger(loan, repayments, asOfYm) {
   let totalCharged = 0;
   let totalPrincipalPaid = 0;
   let totalInterestPaid = 0;
+  let totalMoved = 0;
 
   for (let k = startK; k <= asOfYm; k++) {
     const opening = principalLeft;
@@ -64,6 +65,11 @@ export function loanLedger(loan, repayments, asOfYm) {
     const inMonth = pays.filter((p) => p.k === k);
     const pPaid = inMonth.reduce((s, p) => s + p.principalPaise, 0);
     const iPaid = inMonth.reduce((s, p) => s + p.interestPaise, 0);
+    // a top-up's "moved" entry: settles this loan but no cash came in
+    const moved = inMonth.filter((p) => p.movedToLoanId);
+    const movedPrincipal = moved.reduce((s, p) => s + p.principalPaise, 0);
+    const movedInterest = moved.reduce((s, p) => s + p.interestPaise, 0);
+    totalMoved += movedPrincipal + movedInterest;
 
     principalLeft -= pPaid;
     interestDue += charged - iPaid;
@@ -77,6 +83,8 @@ export function loanLedger(loan, repayments, asOfYm) {
       interestCharged: charged,
       principalPaid: pPaid,
       interestPaid: iPaid,
+      movedPrincipal,
+      movedInterest,
       payments: inMonth.map(repaymentView),
       closingPrincipal: principalLeft,
       interestDue,
@@ -89,6 +97,7 @@ export function loanLedger(loan, repayments, asOfYm) {
       interestCharged: totalCharged,
       principalPaid: totalPrincipalPaid,
       interestPaid: totalInterestPaid,
+      moved: totalMoved,
       principalOutstanding: principalLeft,
       interestOutstanding: interestDue,
       totalOutstanding: principalLeft + interestDue,
@@ -105,6 +114,7 @@ export function repaymentView(r) {
     interestPaise: r.interestPaise,
     method: r.method,
     note: r.note,
+    movedToLoanId: r.movedToLoanId ?? null,
     source: r.source,
     voided: Boolean(r.voidedAt),
     voidReason: r.voidReason ?? null,
@@ -131,12 +141,16 @@ export function loanPosition(loan, repayments, asOfYm) {
     installmentPaise: loan.installmentPaise,
     openingInterestPaise: loan.openingInterestPaise,
     termMonths: loan.termMonths ?? null,
+    topupOfLoanId: loan.topupOfLoanId ?? null,
+    carriedPrincipalPaise: loan.carriedPrincipalPaise ?? 0,
+    movedOutPaise: totals.moved,
     interestFrom: { month: loan.interestFromMonth, year: loan.interestFromYear },
     // this month
     monthInterestPaise: month.interestCharged,
-    monthPrincipalPaidPaise: month.principalPaid,
-    monthInterestPaidPaise: month.interestPaid,
-    monthPaidPaise: month.principalPaid + month.interestPaid,
+    // money actually received this month (a top-up's moved balance is not cash)
+    monthPrincipalPaidPaise: month.principalPaid - month.movedPrincipal,
+    monthInterestPaidPaise: month.interestPaid - month.movedInterest,
+    monthPaidPaise: month.principalPaid + month.interestPaid - month.movedPrincipal - month.movedInterest,
     monthPayments: month.payments,
     // to date
     principalPaidPaise: totals.principalPaid,

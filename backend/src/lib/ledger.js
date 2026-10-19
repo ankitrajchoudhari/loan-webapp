@@ -180,15 +180,17 @@ export function memberHistory(member) {
       method: i.method,
     })),
     ...member.loans.flatMap((l) =>
-      l.repayments.map((r) => ({ kind: 'repayment', loanNo: l.loanNo, ...repaymentView(r), date: iso(r.paidOn), amountPaise: r.totalPaise })),
+      // a top-up's moved balance is not a deposit
+      l.repayments.filter((r) => !r.movedToLoanId).map((r) => ({ kind: 'repayment', loanNo: l.loanNo, ...repaymentView(r), date: iso(r.paidOn), amountPaise: r.totalPaise })),
     ),
   ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const now = currentMonthYear();
   const loans = loanPositions(member, now.month, now.year);
   const totals = {
     installmentsPaise: member.installments.reduce((s, i) => s + i.amountPaise, 0),
-    principalPaidPaise: loans.reduce((s, l) => s + l.principalPaidPaise, 0),
-    interestPaidPaise: loans.reduce((s, l) => s + l.interestPaidPaise, 0),
+    // money actually paid (moved top-up balances excluded)
+    principalPaidPaise: member.loans.flatMap((l) => l.repayments).filter((r) => !r.movedToLoanId).reduce((t, r) => t + r.principalPaise, 0),
+    interestPaidPaise: member.loans.flatMap((l) => l.repayments).filter((r) => !r.movedToLoanId).reduce((t, r) => t + r.interestPaise, 0),
     arrears: installmentArrears(member),
   };
   return { member: publicMember(member), months, deposits, loans, totals };
@@ -223,9 +225,11 @@ export async function dashboardFigures() {
       const ins = loanInsights(l, l.repayments, ym(year, month));
       if (!ins) continue;
       if (ins.status === 'overdue') { overdueLoans++; overduePaise += ins.overduePaise; }
-      loansGiven += l.principalPaise; // money lent out of the samiti's cash
-      principalReturned += l.repayments.reduce((s, r) => s + r.principalPaise, 0);
-      interestEarned += l.repayments.reduce((s, r) => s + r.interestPaise, 0);
+      // real cash only: a top-up lends out just the new money, and its "moved" entry brings no cash in
+      loansGiven += l.principalPaise - (l.carriedPrincipalPaise ?? 0);
+      const cash = l.repayments.filter((r) => !r.movedToLoanId);
+      principalReturned += cash.reduce((s, r) => s + r.principalPaise, 0);
+      interestEarned += cash.reduce((s, r) => s + r.interestPaise, 0);
     }
     for (const p of loanPositions(m, month, year)) {
       loanCollectedThisMonth += p.monthPaidPaise;
