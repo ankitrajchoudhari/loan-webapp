@@ -237,23 +237,19 @@ function NewPayment({ data, onCreated }) {
       {/* checkout */}
       {chosen && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-3 pb-2">
-          <div className="hero-card mx-auto max-w-lg rounded-[1.4rem] p-3 text-white">
+          <div className="surface mx-auto max-w-lg p-3 shadow-[0_-8px_28px_-10px_rgba(60,30,0,.25)]">
             <div className="mb-2.5 flex items-baseline justify-between gap-2 px-1">
-              <span className="min-w-0 truncate text-sm text-white/75">{chosen.label}</span>
-              <span className="num shrink-0 text-xl font-extrabold">{money(chosen.amountPaise + feePaise)}</span>
+              <span className="min-w-0 truncate text-sm text-muted">{chosen.label}</span>
+              <span className="num shrink-0 text-xl font-extrabold text-maroon">{money(chosen.amountPaise + feePaise)}</span>
             </div>
-            {feePaise > 0 && <p className="-mt-2 mb-2 px-1 text-right text-xs text-white/60">{t('pay.feeNote', { dues: money(chosen.amountPaise), fee: money(feePaise) })}</p>}
+            {feePaise > 0 && <p className="-mt-2 mb-2 px-1 text-right text-xs text-muted">{t('pay.feeNote', { dues: money(chosen.amountPaise), fee: money(feePaise) })}</p>}
             <div className="grid grid-cols-[1fr_auto] gap-2">
               {data.upi ? (
-                <button type="button" disabled={busy} onClick={() => start('upi')} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gold px-4 font-bold text-[#3a0c14] transition active:scale-[.98] disabled:opacity-60">
-                  <Icon name="wallet" className="size-5" />{busy ? '...' : t('pay.byUpiShort')}
-                </button>
+                <Button variant="success" size="md" icon="wallet" loading={busy} onClick={() => start('upi')}>{t('pay.byUpiShort')}</Button>
               ) : (
-                <span className="flex items-center rounded-2xl bg-white/10 px-3 text-xs text-white/70">{t('pay.upiNotSet')}</span>
+                <span className="flex items-center rounded-xl bg-paper px-3 text-xs text-muted">{t('pay.upiNotSet')}</span>
               )}
-              <button type="button" disabled={busy} onClick={() => start('cash')} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white/12 px-4 font-semibold ring-1 ring-white/20 transition active:scale-[.98] disabled:opacity-60">
-                <Icon name="handCoins" className="size-5" />{t('pay.cashShort')}
-              </button>
+              <Button variant="secondary" size="md" icon="handCoins" disabled={busy} onClick={() => start('cash')}>{t('pay.cashShort')}</Button>
             </div>
           </div>
         </div>

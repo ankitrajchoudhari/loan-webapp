@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import { ErrorBox, Loading } from '@/components/ui';
+import { ButtonLink, ErrorBox, Loading } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { useApi } from '@/lib/hooks';
 import { fmtDate, money } from '@/lib/format';
@@ -21,19 +21,19 @@ function Ring({ pct, size = 76 }) {
 }
 
 /** This month at a glance: one tile per obligation (installment, loan EMI). */
-function MonthTile({ icon, label, paid, amount, sub }) {
+function MonthTile({ icon, label, paid, amount, sub, statusPaid, statusDue }) {
   return (
     <div className="surface flex flex-col gap-2 p-3.5">
       <div className="flex items-center justify-between">
         <span className="grid size-8 place-items-center rounded-xl bg-paper text-maroon"><Icon name={icon} className="size-4.5" /></span>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.7rem] font-bold ${paid ? 'bg-ok-bg text-ok' : 'bg-bad-bg text-bad'}`}>
-          <span className={`size-1.5 rounded-full ${paid ? 'bg-ok' : 'bg-bad'}`} />{paid ? '✓' : '!'}
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${paid ? 'bg-ok-bg text-ok' : 'bg-bad-bg text-bad'}`}>
+          <Icon name={paid ? 'check' : 'clock'} className="size-3.5" strokeWidth={2.5} />{paid ? statusPaid : statusDue}
         </span>
       </div>
       <div>
         <div className="text-xs text-muted">{label}</div>
         <div className={`num text-lg font-bold leading-tight ${paid ? 'text-ink' : 'text-bad'}`}>{amount}</div>
-        {sub && <div className="mt-0.5 text-[0.7rem] text-muted">{sub}</div>}
+        {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
       </div>
     </div>
   );
@@ -66,13 +66,13 @@ export default function MemberHome() {
       <section className="hero-card relative overflow-hidden rounded-[1.6rem] p-5 text-white">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/12 font-brand text-lg ring-1 ring-white/25">{first[0]?.toUpperCase()}</span>
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gold text-base font-bold text-[#4a1019]">{first[0]?.toUpperCase()}</span>
             <div className="min-w-0 leading-tight">
               <div className="text-xs text-white/65">{t('member.namasteShort')}</div>
               <div className="truncate font-semibold">{member.fullName}</div>
             </div>
           </div>
-          <span className="num shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-semibold text-white/85">#{member.memberNo}</span>
+          <span className="num shrink-0 text-xs font-semibold text-white/70">{t('field.memberNo')} {member.memberNo}</span>
         </div>
 
         <div className="mt-6">
@@ -80,26 +80,21 @@ export default function MemberHome() {
           {owed > 0 ? (
             <div className="num mt-1 text-[2.6rem] font-extrabold leading-none tracking-tight">{money(owed)}</div>
           ) : (
-            <div className="mt-1 flex items-center gap-2 text-2xl font-bold"><Icon name="checkCircle" className="size-7 text-gold" />{t('home.allClear')}</div>
+            <div className="mt-1 text-[1.75rem] font-extrabold leading-tight">{t('home.allClear')}</div>
           )}
           <div className="mt-2 text-sm text-white/70">
             {hasRunning ? t('home.loanLeftLine', { amount: money(running.totalOutstandingPaise) }) : owed > 0 ? t('home.payToStay') : t('home.thanks')}
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+        <div className="mt-5">
           {owed > 0 ? (
-            <Link href="/member/pay" className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gold px-4 font-bold text-[#3a0c14] shadow-sm transition active:scale-[.98]">
-              <Icon name="wallet" className="size-5" />{t('home.payNow', { amount: money(owed + fee) })}
-            </Link>
+            <ButtonLink href="/member/pay" variant="success" size="md" icon="wallet" full>{t('home.payNow', { amount: money(owed + fee) })}</ButtonLink>
           ) : (
-            <Link href="/member/pay" className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white/12 px-4 font-semibold ring-1 ring-white/20 transition active:scale-[.98]">
-              <Icon name="wallet" className="size-5" />{hasRunning ? t('home.payAhead') : t('home.openPay')}
-            </Link>
+            <ButtonLink href={hasRunning ? '/member/pay?loan=ahead' : '/member/pay'} variant="secondary" size="md" icon="wallet" full className="border-transparent">
+              {hasRunning ? t('home.payAhead') : t('home.openPay')}
+            </ButtonLink>
           )}
-          <Link href="/member/history" className="grid min-h-12 w-12 place-items-center rounded-2xl bg-white/12 ring-1 ring-white/20" aria-label={t('member.tileRecords')}>
-            <Icon name="history" className="size-5" />
-          </Link>
         </div>
         {credit > 0 && <div className="mt-3 text-xs text-gold">{t('member.advance', { amount: money(credit) })}</div>}
       </section>
@@ -108,12 +103,12 @@ export default function MemberHome() {
       <section>
         <h2 className="eyebrow mb-2 px-1 text-muted">{t('home.thisMonth', { month: t(`m${data.month}`), year: data.year })}</h2>
         <div className={`grid gap-3 ${hasRunning ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          <MonthTile icon="calendar" label={t('home.installment')} paid={pending === 0}
+          <MonthTile icon="calendar" label={t('home.installment')} paid={pending === 0} statusPaid={t('home.paidShort')} statusDue={t('home.due')}
             amount={pending === 0 ? money(inst.paidPaise || inst.duePaise) : money(pending)}
-            sub={pending === 0 ? t('home.paid') : earlierArrears.months > 0 ? t('home.monthsDue', { n: earlierArrears.months + (inst.pendingPaise > 0 ? 1 : 0) }) : t('home.due')} />
+            sub={pending === 0 ? t('home.thisMonthPaid') : earlierArrears.months > 0 ? t('home.monthsDue', { n: earlierArrears.months + (inst.pendingPaise > 0 ? 1 : 0) }) : t('home.due')} />
           {hasRunning && (
-            <MonthTile icon="handCoins" label={t('home.emi')} paid={emiDue === 0}
-              amount={emiDue === 0 ? t('home.paidShort') : money(emiDue)}
+            <MonthTile icon="handCoins" label={t('home.emi')} paid={emiDue === 0} statusPaid={t('home.paidShort')} statusDue={t('home.due')}
+              amount={emiDue === 0 ? t('home.emiCovered') : money(emiDue)}
               sub={emiDue === 0 ? t('home.paid') : data.loanStatus?.monthsBehind > 1 ? t('home.emisBehind', { n: data.loanStatus.monthsBehind }) : t('home.due')} />
           )}
         </div>
