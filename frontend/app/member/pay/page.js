@@ -52,7 +52,7 @@ export default function Pay() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-maroon">{t('pay.title')}</h1>
+      <h1 className="px-1 text-2xl font-bold text-maroon">{t('pay.title')}</h1>
       {open ? (
         <OpenPayment key={`${open.id}-${open.amountPaise}`} payment={open} upi={data.upi} dues={data.dues} onChange={load} />
       ) : (
@@ -64,7 +64,6 @@ export default function Pay() {
         </>
       )}
       <History items={history} />
-      <ButtonLink href="/member" variant="secondary" icon="back" full>{t('common.back')}</ButtonLink>
     </div>
   );
 }
@@ -88,110 +87,52 @@ function Outcome({ payment }) {
 }
 
 /**
- * What does the member want to pay? This month's installment (or older unpaid ones), a loan's EMI,
- * EMIs in advance, the whole loan (settlement), or everything due at once. Then UPI or cash.
+ * Pay screen: a summary of what is due, then one list of choices (installment, each loan's EMI,
+ * EMIs ahead, settlement, everything) — tap one — and a checkout bar at the bottom (UPI or cash).
  */
 function NewPayment({ data, onCreated }) {
   const { t } = useTranslation();
-  const [choice, setChoice] = useState(null); // { purpose, loanId?, amountPaise, title, fixed }
-  if (choice) return <PayForm data={data} choice={choice} onBack={() => setChoice(null)} onCreated={onCreated} />;
-  return <PayOptions data={data} onChoose={setChoice} />;
-}
-
-function PayOptions({ data, onChoose }) {
-  const { t } = useTranslation();
   const { dues } = data;
   const loans = data.loans ?? [];
-  const instDue = dues.installmentPaise;
-  return (
-    <div className="space-y-3">
-      {/* installments */}
-      <Card title={t('pay.instTitle')} icon="calendar">
-        {instDue > 0 ? (
-          <div className="space-y-2">
-            {dues.installments.map((i) => (
-              <Row key={`${i.year}-${i.month}`} label={`${t('history.installmentFor', { month: t(`m${i.month}`), year: i.year })}${i.partial ? ` (${t('status.partial')})` : ''}`} value={money(i.pendingPaise)} tone="bad" />
-            ))}
-            <Button variant="success" full icon="wallet" onClick={() => onChoose({ purpose: 'installment', amountPaise: Math.max(100, instDue - Math.min(dues.creditPaise, instDue)), title: t('pay.instTitle') })}>
-              {t('pay.payInstallment', { amount: money(Math.max(0, instDue - Math.min(dues.creditPaise, instDue))) })}
-            </Button>
-          </div>
-        ) : (
-          <p className="flex items-center gap-2 rounded-xl bg-ok-bg px-3 py-2.5 font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{t('pay.instPaid')}</p>
-        )}
-      </Card>
-
-      {/* each running loan */}
-      {loans.map((l) => <LoanPayCard key={l.loanId} l={l} onChoose={onChoose} />)}
-
-      {/* everything at once */}
-      {dues.payablePaise > 0 && (instDue > 0 && loans.some((l) => l.dueNowPaise > 0)) && (
-        <Button variant="secondary" full icon="receipt" onClick={() => onChoose({ purpose: 'all', amountPaise: dues.payablePaise, title: t('pay.allTitle'), editable: true })}>
-          {t('pay.payAll', { amount: money(dues.payablePaise) })}
-        </Button>
-      )}
-      {dues.creditPaise > 0 && <p className="text-center text-sm text-ok">{t('pay.creditHave', { amount: money(dues.creditPaise) })}</p>}
-    </div>
-  );
-}
-
-function LoanPayCard({ l, onChoose }) {
-  const { t } = useTranslation();
-  const [ahead, setAhead] = useState(1);
-  const emi = l.installmentPaise;
-  const maxAhead = emi > 0 ? Math.max(1, Math.ceil(l.payoffPaise / emi)) : 1;
-  const aheadPaise = Math.min(l.payoffPaise, emi * ahead);
-  return (
-    <Card title={t('pay.loanTitle', { n: l.loanNo })} icon="handCoins">
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-xl bg-stone-50 p-2"><div className="text-muted">{t('pay.loanLeftNow')}</div><div className="num text-lg font-bold">{money(l.payoffPaise)}</div></div>
-          <div className="rounded-xl bg-stone-50 p-2"><div className="text-muted">{t('loans.installment')}</div><div className="num text-lg font-bold">{emi ? money(emi) : '—'}</div></div>
-        </div>
-        {l.dueNowPaise > 0 ? (
-          <Button variant="success" full icon="wallet" onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: l.dueNowPaise, title: t('pay.emiTitle', { n: l.loanNo }) })}>
-            {l.overduePaise > 0 ? t('pay.payEmiOverdue', { amount: money(l.dueNowPaise), n: l.monthsBehind }) : t('pay.payEmi', { amount: money(l.dueNowPaise) })}
-          </Button>
-        ) : (
-          <p className="flex items-center gap-2 rounded-xl bg-ok-bg px-3 py-2.5 font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{t('pay.emiPaid')}</p>
-        )}
-        {emi > 0 && l.payoffPaise > emi && (
-          <div className="rounded-2xl border border-line p-3">
-            <div className="mb-2 font-semibold">{t('pay.advanceTitle')}</div>
-            <div className="flex flex-wrap items-center gap-2">
-              {[1, 2, 3, 6].filter((n) => n <= maxAhead).map((n) => (
-                <button key={n} type="button" onClick={() => setAhead(n)} className={`min-h-10 rounded-xl border-2 px-3 font-semibold ${ahead === n ? 'border-maroon bg-maroon text-white' : 'border-line bg-white'}`}>{t('pay.nEmis', { n })}</button>
-              ))}
-            </div>
-            <Button variant="secondary" full className="mt-2" icon="calendarCheck"
-              onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: aheadPaise, title: t('pay.advanceFor', { n: l.loanNo, count: ahead }) })}>
-              {t('pay.payAdvance', { amount: money(aheadPaise), n: ahead })}
-            </Button>
-          </div>
-        )}
-        <Button full icon="checkCircle"
-          onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: l.payoffPaise, title: t('pay.settleTitle', { n: l.loanNo }), settle: l })}>
-          {t('pay.settle', { amount: money(l.payoffPaise) })}
-        </Button>
-        <p className="text-center text-xs text-muted">{t('pay.settleHint', { principal: money(l.principalOutstandingPaise), interest: money(Math.max(0, l.interestOutstandingPaise)) })}</p>
-      </div>
-    </Card>
-  );
-}
-
-function PayForm({ data, choice, onBack, onCreated }) {
-  const { t } = useTranslation();
   const feePaise = data.feePaise ?? 0;
-  const [amount, setAmount] = useState(rupeesText(choice.amountPaise));
+  const credit = dues.creditPaise ?? 0;
+  const instNet = Math.max(0, dues.installmentPaise - Math.min(credit, dues.installmentPaise));
+  const loanDue = loans.reduce((t, l) => t + l.dueNowPaise, 0);
+  const loanLeft = loans.reduce((t, l) => t + l.payoffPaise, 0);
+  const [ahead, setAhead] = useState({}); // loanId → EMIs to pay ahead
+  const [sel, setSel] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const amountPaise = choice.editable ? toPaise(amount) ?? 0 : choice.amountPaise;
+
+  // every choice the member can tap
+  const options = [];
+  if (instNet > 0) options.push({ key: 'inst', purpose: 'installment', amountPaise: Math.max(100, instNet), label: t('pay.instTitle') });
+  for (const l of loans) {
+    if (l.dueNowPaise > 0) options.push({ key: `emi-${l.loanId}`, purpose: 'loan', loanId: l.loanId, amountPaise: l.dueNowPaise, label: t('pay.emiTitle', { n: l.loanNo }) });
+    const n = ahead[l.loanId] ?? 1;
+    if (l.installmentPaise > 0 && l.payoffPaise > l.installmentPaise) options.push({ key: `ahead-${l.loanId}`, purpose: 'loan', loanId: l.loanId, amountPaise: Math.min(l.payoffPaise, l.installmentPaise * n), label: t('pay.advanceFor', { n: l.loanNo, count: n }) });
+    if (l.payoffPaise > 0) options.push({ key: `settle-${l.loanId}`, purpose: 'loan', loanId: l.loanId, amountPaise: l.payoffPaise, label: t('pay.settleTitle', { n: l.loanNo }) });
+  }
+  if (instNet > 0 && loanDue > 0) options.push({ key: 'all', purpose: 'all', amountPaise: dues.payablePaise, label: t('pay.allTitle') });
+  const byKey = Object.fromEntries(options.map((o) => [o.key, o]));
+
+  // start with what the link asked for (home "Pay EMI" → ?loan=…), else the first thing due
+  useEffect(() => {
+    if (sel) return;
+    const q = new URLSearchParams(window.location.search);
+    const firstOf = (prefix) => options.find((o) => o.key.startsWith(prefix))?.key;
+    const want = q.get('loan') ? (firstOf('emi-') || firstOf('ahead-') || firstOf('settle-')) : null;
+    setSel(want || (byKey.inst && 'inst') || firstOf('emi-') || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const chosen = sel ? byKey[sel] : null;
 
   const start = async (method) => {
+    if (!chosen) return;
     setBusy(true);
     setError(null);
     try {
-      await api('/pay', { method: 'POST', body: { method, amountPaise: rupeesText(amountPaise), purpose: choice.purpose, loanId: choice.loanId } });
+      await api('/pay', { method: 'POST', body: { method, amountPaise: rupeesText(chosen.amountPaise), purpose: chosen.purpose, loanId: chosen.loanId } });
       await onCreated();
     } catch (e) {
       setError(e);
@@ -201,38 +142,154 @@ function PayForm({ data, choice, onBack, onCreated }) {
   };
 
   return (
-    <Card title={choice.title} icon="calculator">
-      <div className="space-y-3">
-        {choice.settle && (
-          <Notice tone="brand" icon="checkCircle">
-            {t('pay.settleExplain', { principal: money(choice.settle.principalOutstandingPaise), interest: money(Math.max(0, choice.settle.interestOutstandingPaise)), total: money(choice.settle.payoffPaise) })}
-          </Notice>
-        )}
-        {choice.editable ? (
-          <Field label={t('pay.amount')} hint={t('pay.amountHint')}><MoneyInput value={amount} onChange={setAmount} /></Field>
-        ) : null}
-        <div className="rounded-xl bg-stone-50 px-3 py-2">
-          <Row label={feePaise > 0 ? t('pay.toSamiti') : t('pay.total')} value={money(amountPaise)} strong={!feePaise} />
-          {feePaise > 0 && <Row label={t('pay.fee')} value={money(feePaise)} />}
-          {feePaise > 0 && <Row label={t('pay.total')} value={money(amountPaise + feePaise)} strong />}
+    <div className="space-y-5 pb-36">
+      {/* summary */}
+      {dues.payablePaise > 0 ? (
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-maroon via-maroon-dark to-[#3f0d16] p-5 text-white shadow-lg">
+          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-brand/25" />
+          <p className="relative text-sm text-white/75">{t('pay.dueNowTitle')}</p>
+          <p className="num relative mt-0.5 text-4xl font-extrabold tracking-tight">{money(dues.payablePaise)}</p>
+          <div className="relative mt-3 flex flex-wrap gap-2 text-sm">
+            {instNet > 0 && <span className="rounded-full bg-white/15 px-3 py-1">{t('pay.chipInst', { amount: money(instNet) })}</span>}
+            {loanDue > 0 && <span className="rounded-full bg-white/15 px-3 py-1">{t('pay.chipEmi', { amount: money(loanDue) })}</span>}
+            {credit > 0 && <span className="rounded-full bg-ok/80 px-3 py-1">{t('pay.chipCredit', { amount: money(credit) })}</span>}
+          </div>
+        </section>
+      ) : (
+        <section className="flex items-center gap-4 rounded-3xl border border-ok/25 bg-ok-bg p-5">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-ok text-white"><Icon name="check" className="size-7" strokeWidth={3} /></span>
+          <div>
+            <p className="text-lg font-bold text-ok">{t('pay.upToDate')}</p>
+            <p className="text-sm text-ok/90">{loanLeft > 0 ? t('pay.upToDateLoan', { amount: money(loanLeft) }) : t('pay.upToDateNoLoan')}</p>
+          </div>
+        </section>
+      )}
+
+      <div>
+        <h2 className="mb-2 px-1 text-sm font-bold uppercase tracking-wide text-muted">{t('pay.whatToPay')}</h2>
+        <div className="space-y-2.5" role="radiogroup" aria-label={t('pay.whatToPay')}>
+          {/* installment */}
+          {instNet > 0 ? (
+            <Choice selected={sel === 'inst'} onSelect={() => setSel('inst')} icon="calendar" title={t('pay.instTitle')}
+              sub={dues.installments.map((i) => `${t(`m${i.month}`)} ${i.year}`).slice(0, 3).join(', ') + (dues.installments.length > 3 ? ` +${dues.installments.length - 3}` : '')}
+              amount={instNet} tone="bad" />
+          ) : (
+            <Done icon="calendar" title={t('pay.instTitle')} sub={t('pay.instPaidShort')} />
+          )}
+
+          {/* each loan */}
+          {loans.map((l) => {
+            const pct = l.principalPaise ? Math.floor(((l.principalPaise - l.principalOutstandingPaise) * 100) / l.principalPaise) : 0;
+            const n = ahead[l.loanId] ?? 1;
+            const maxN = l.installmentPaise ? Math.max(1, Math.ceil(l.payoffPaise / l.installmentPaise)) : 1;
+            return (
+              <div key={l.loanId} className="overflow-hidden rounded-3xl border border-line bg-white shadow-[0_1px_3px_rgba(60,30,0,.05)]">
+                <div className="flex items-center gap-3 border-b border-line bg-stone-50/70 px-4 py-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-dark"><Icon name="handCoins" className="size-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-bold">{t('pay.loanTitle', { n: l.loanNo })}</span>
+                      <span className="num text-sm font-semibold text-muted">{t('pay.leftShort', { amount: money(l.payoffPaise) })}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-200"><div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} /></div>
+                    <div className="mt-1 text-xs text-muted">{t('pay.repaidPct', { pct })}{l.installmentPaise ? ` · ${t('pay.emiIs', { amount: money(l.installmentPaise) })}` : ''}</div>
+                  </div>
+                </div>
+                <div className="space-y-2 p-2.5">
+                  {l.dueNowPaise > 0 ? (
+                    <Choice flat selected={sel === `emi-${l.loanId}`} onSelect={() => setSel(`emi-${l.loanId}`)} icon="calendarCheck"
+                      title={l.overduePaise > 0 ? t('pay.emisDue', { n: l.monthsBehind }) : t('pay.thisMonthEmi')}
+                      sub={l.overduePaise > 0 ? t('pay.overdueSub') : t('pay.emiSub')} amount={l.dueNowPaise} tone="bad" />
+                  ) : (
+                    <Done flat icon="calendarCheck" title={t('pay.thisMonthEmi')} sub={t('pay.emiPaidShort')} />
+                  )}
+                  {byKey[`ahead-${l.loanId}`] && (
+                    <Choice flat selected={sel === `ahead-${l.loanId}`} onSelect={() => setSel(`ahead-${l.loanId}`)} icon="clock" title={t('pay.payAhead')}
+                      sub={t('pay.payAheadSub')} amount={byKey[`ahead-${l.loanId}`].amountPaise}
+                      extra={(
+                        <span className="inline-flex items-center rounded-xl border border-line bg-white" onClick={(e) => e.stopPropagation()}>
+                          <button type="button" aria-label="−" disabled={n <= 1} onClick={() => { setAhead((a) => ({ ...a, [l.loanId]: Math.max(1, n - 1) })); setSel(`ahead-${l.loanId}`); }}
+                            className="grid size-9 place-items-center text-lg font-bold text-maroon disabled:opacity-30">−</button>
+                          <span className="num w-14 text-center text-sm font-bold">{t('pay.nEmis', { n })}</span>
+                          <button type="button" aria-label="+" disabled={n >= maxN} onClick={() => { setAhead((a) => ({ ...a, [l.loanId]: Math.min(maxN, n + 1) })); setSel(`ahead-${l.loanId}`); }}
+                            className="grid size-9 place-items-center text-lg font-bold text-maroon disabled:opacity-30">+</button>
+                        </span>
+                      )} />
+                  )}
+                  <Choice flat selected={sel === `settle-${l.loanId}`} onSelect={() => setSel(`settle-${l.loanId}`)} icon="shield" title={t('pay.settleShort')}
+                    sub={t('pay.settleHint', { principal: money(l.principalOutstandingPaise), interest: money(Math.max(0, l.interestOutstandingPaise)) })} amount={l.payoffPaise} />
+                </div>
+              </div>
+            );
+          })}
+
+          {byKey.all && (
+            <Choice selected={sel === 'all'} onSelect={() => setSel('all')} icon="receipt" title={t('pay.allTitle')} sub={t('pay.allSub')} amount={dues.payablePaise} />
+          )}
         </div>
-        {error && <ErrorBox error={error} />}
-        {data.upi && (
-          <button type="button" disabled={busy || amountPaise < 100} onClick={() => start('upi')}
-            className="flex w-full items-center gap-3 rounded-2xl bg-ok px-4 py-3.5 text-left text-white shadow-md transition hover:brightness-95 disabled:opacity-60">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/15"><Icon name="wallet" className="size-6" /></span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-lg font-bold leading-tight">{t('pay.upiApp', { amount: money(amountPaise + feePaise) })}</span>
-              <span className="block text-sm text-white/85">{t('pay.upiAppSub')}</span>
-            </span>
-            <Icon name="chevronRight" className="size-5 shrink-0" />
-          </button>
-        )}
-        <Button variant="secondary" full icon="handCoins" loading={busy} disabled={amountPaise < 100} onClick={() => start('cash')}>{t('pay.byCash')}</Button>
-        {!data.upi && <p className="text-sm text-muted">{t('pay.upiNotSet')}</p>}
-        <Button variant="ghost" full icon="back" onClick={onBack}>{t('pay.chooseOther')}</Button>
       </div>
-    </Card>
+
+      {chosen?.key.startsWith('settle-') && (
+        <Notice tone="brand" icon="shield">{t('pay.settleNote')}</Notice>
+      )}
+      {error && <ErrorBox error={error} />}
+
+      {/* checkout */}
+      {chosen && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-3 pb-2">
+          <div className="mx-auto max-w-lg rounded-3xl border border-line bg-white/95 p-3 shadow-[0_-6px_24px_rgba(60,30,0,.14)] backdrop-blur">
+            <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
+              <span className="min-w-0 truncate text-sm font-semibold text-muted">{chosen.label}</span>
+              <span className="num shrink-0 text-xl font-extrabold">{money(chosen.amountPaise + feePaise)}</span>
+            </div>
+            {feePaise > 0 && <p className="-mt-1.5 mb-2 px-1 text-right text-xs text-muted">{t('pay.feeNote', { dues: money(chosen.amountPaise), fee: money(feePaise) })}</p>}
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              {data.upi ? (
+                <Button variant="success" icon="wallet" loading={busy} onClick={() => start('upi')}>{t('pay.byUpiShort')}</Button>
+              ) : (
+                <span className="flex items-center rounded-xl bg-stone-100 px-3 text-xs text-muted">{t('pay.upiNotSet')}</span>
+              )}
+              <Button variant="secondary" icon="handCoins" disabled={busy} onClick={() => start('cash')}>{t('pay.cashShort')}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One tappable choice (radio row): icon, title, one line of detail, amount. */
+function Choice({ selected, onSelect, icon, title, sub, amount, tone, extra, flat }) {
+  return (
+    <div role="radio" aria-checked={selected} tabIndex={0} onClick={onSelect} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect())}
+      className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 px-3 py-3 transition active:scale-[.99] ${
+        selected ? 'border-maroon bg-maroon/[.04] shadow-[0_0_0_4px_rgba(122,31,43,.08)]' : `${flat ? 'border-transparent bg-stone-50 hover:border-line' : 'border-line bg-white hover:border-brand/40'}`
+      }`}>
+      <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 ${selected ? 'border-maroon' : 'border-stone-300'}`}>
+        {selected && <span className="size-2.5 rounded-full bg-maroon" />}
+      </span>
+      <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${selected ? 'bg-maroon text-white' : 'bg-white text-brand-dark ring-1 ring-line'}`}><Icon name={icon} className="size-4.5" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold leading-tight">{title}</span>
+        {sub && <span className="mt-0.5 block truncate text-xs text-muted">{sub}</span>}
+        {extra && <span className="mt-2 block">{extra}</span>}
+      </span>
+      <span className={`num shrink-0 text-right font-bold ${tone === 'bad' ? 'text-bad' : 'text-ink'}`}>{money(amount)}</span>
+    </div>
+  );
+}
+
+/** A row that is already paid — shown so the member sees it, but not tappable. */
+function Done({ icon, title, sub, flat }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl px-3 py-3 ${flat ? 'bg-ok-bg/60' : 'border border-ok/20 bg-ok-bg/60'}`}>
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok text-white"><Icon name="check" className="size-3.5" strokeWidth={3} /></span>
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-ok ring-1 ring-ok/20"><Icon name={icon} className="size-4.5" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold leading-tight text-ok">{title}</span>
+        <span className="mt-0.5 block text-xs text-ok/80">{sub}</span>
+      </span>
+    </div>
   );
 }
 

@@ -156,6 +156,12 @@ export default function MemberHome() {
           {data.loanStatus?.overduePaise > 0 && (
             <p className="mt-1 rounded-lg bg-bad-bg px-2 py-1 text-sm font-semibold text-bad">{t('member.loanOverdue', { amount: money(data.loanStatus.overduePaise), n: data.loanStatus.monthsBehind })}</p>
           )}
+          <div className="mt-2.5 flex gap-2">
+            <Link href="/member/pay?loan=emi" className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-bold shadow-sm active:scale-[.98] ${data.loanStatus?.dueNowPaise > 0 ? 'bg-ok text-white' : 'border border-line bg-white text-maroon'}`}>
+              <Icon name="wallet" className="size-4" />
+              {data.loanStatus?.dueNowPaise > 0 ? t('member.payEmiBtn', { amount: money(data.loanStatus.dueNowPaise) }) : t('member.payLoanBtn')}
+            </Link>
+          </div>
         </Box>
       ) : (
         <p className="flex items-center justify-center gap-2 rounded-2xl bg-ok-bg px-4 py-3 text-center font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{hasLoans ? t('member.loansRepaid') : t('member.noLoan')}</p>
