@@ -48,7 +48,7 @@ export default function PlatformPage() {
       )}
 
       {/* running charge this month */}
-      <div className="rounded-2xl border border-line bg-white p-4">
+      <div className="surface p-4">
         <div className="text-sm font-semibold text-muted">{t('platform.thisMonth', { month: t(`m${d.current.month}`), year: d.current.year })}</div>
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-lg">{t('platform.daysSoFar', { n: d.current.days, rate: money(d.ratePaise) })}</span>

@@ -29,7 +29,7 @@ export function HelpCard({ h, onChange, compact }) {
     }
   };
   return (
-    <div className={`space-y-3 ${compact ? '' : 'rounded-2xl border border-line bg-white p-4'}`}>
+    <div className={`space-y-3 ${compact ? '' : 'surface p-4'}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-bold text-maroon">#{h.requestNo}</span>
         <span className="text-lg font-bold">{h.name || t('help.unknownName')}</span>

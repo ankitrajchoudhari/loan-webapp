@@ -42,7 +42,7 @@ export default function Team() {
         {data.staff.map((s) => {
           const mine = data.canManage.includes(s.role);
           return (
-            <li key={s.id} className={`rounded-2xl border border-line bg-white p-4 ${s.status !== 'active' ? 'opacity-60' : ''}`}>
+            <li key={s.id} className={`surface p-4 ${s.status !== 'active' ? 'opacity-60' : ''}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-lg font-semibold">{s.name}</span>
                 <Badge tone={ROLE_TONE[s.role]}>{t(`role.${s.role}`)}</Badge>

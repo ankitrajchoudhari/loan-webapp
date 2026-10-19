@@ -80,7 +80,7 @@ export default function AdminHome() {
       )}
 
       {/* spec §4.1 figures */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
         <Stat label={t('dash.totalMembers')} value={data.totalMembers} icon="users" tone="brand" href="/admin/members"
           sub={data.inactiveMembers ? t('dash.inactive', { n: data.inactiveMembers }) : null} />
         <Stat label={t('dash.installmentThisMonth')} value={money(data.installmentThisMonthPaise)} tone="ok" icon="wallet" href="/admin/installments" />

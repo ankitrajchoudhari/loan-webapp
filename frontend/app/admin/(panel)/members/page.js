@@ -42,13 +42,13 @@ export default function Members() {
       ) : data?.members.length === 0 ? (
         <Empty icon="users">{q ? t('members.noMatch') : t('members.none')}</Empty>
       ) : (
-        <ul className="space-y-2">
+        <ul className="surface divide-y divide-line overflow-hidden">
           {data?.members.map((m) => (
             <li key={m.id}>
-              <Link href={`/admin/members/${m.id}`} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3 transition hover:border-brand/50">
-                <span className="num grid size-12 shrink-0 place-items-center rounded-full bg-brand-100 font-bold text-maroon">{m.memberNo}</span>
+              <Link href={`/admin/members/${m.id}`} className="flex items-center gap-3 px-4 py-3 transition hover:bg-paper/60">
+                <span className="num grid size-10 shrink-0 place-items-center rounded-xl bg-paper text-sm font-bold text-maroon">{m.memberNo}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2 text-lg font-semibold">
+                  <span className="flex flex-wrap items-center gap-2 font-semibold">
                     {m.fullName}
                     {m.status === 'inactive' && <Badge>{t('member.inactive')}</Badge>}
                   </span>

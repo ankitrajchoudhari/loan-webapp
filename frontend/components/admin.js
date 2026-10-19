@@ -126,7 +126,7 @@ export function ChangeHistory({ entries }) {
   return (
     <ol className="space-y-3">
       {entries.map((e) => (
-        <li key={e.id} className="rounded-2xl border border-line bg-white p-3">
+        <li key={e.id} className="surface p-3.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-semibold">{t(`audit.${e.action}`, { defaultValue: e.action })}</span>
             <span className="num text-sm text-muted">{fmtDateTime(e.at)}</span>

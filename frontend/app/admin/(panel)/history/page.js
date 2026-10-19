@@ -48,7 +48,7 @@ export default function HistoryBatches() {
         <ul className="space-y-2">
           {data?.batches.map((b) => (
             <li key={b.id}>
-              <Link href={`/admin/history/${b.id}`} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-4 hover:border-brand/50">
+              <Link href={`/admin/history/${b.id}`} className="flex items-center gap-3 surface p-4 hover:-translate-y-0.5">
                 <div className="min-w-0 flex-1">
                   <div className="text-lg font-semibold">{b.title}</div>
                   <div className="num text-sm text-muted">{fmtDateTime(b.createdAt)} · {t('history.rowsCount', { n: b.rows })}</div>

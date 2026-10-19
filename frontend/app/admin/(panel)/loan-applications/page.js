@@ -27,7 +27,7 @@ export default function LoanApplications() {
           {data.applications.map((a) => {
             const checked = DOC_KINDS.filter((k) => a.documents[k]?.status === 'verified').length;
             return (
-              <Link key={a.id} href={`/admin/loan-applications/${a.id}`} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-4 transition hover:border-brand/50 hover:shadow-md">
+              <Link key={a.id} href={`/admin/loan-applications/${a.id}`} className="flex items-center gap-3 surface p-4 transition hover:-translate-y-0.5">
                 <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-brand-50 text-lg font-bold text-maroon">{a.member.fullName.trim()[0]?.toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">

@@ -63,7 +63,7 @@ export default function Payments() {
       ) : (
         <ul className="space-y-2">
           {data?.payments.map((p) => (
-            <li key={p.id} className="rounded-2xl border border-line bg-white p-4">
+            <li key={p.id} className="surface p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-maroon">#{p.paymentNo}</span>
                 <span className="font-semibold">{p.member?.fullName}</span>

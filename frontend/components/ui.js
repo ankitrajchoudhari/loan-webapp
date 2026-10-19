@@ -103,7 +103,7 @@ export function TestBadge() {
   return <Badge tone="test">{t('practice.badge')}</Badge>;
 }
 
-const TONE_TEXT = { ok: 'text-ok', warn: 'text-warn', bad: 'text-bad', brand: 'text-brand-dark', test: 'text-test' };
+const TONE_TEXT = { ok: 'text-ok', warn: 'text-warn', bad: 'text-bad', brand: 'text-ink', test: 'text-test' };
 const TONE_BUBBLE = { ok: 'bg-ok-bg text-ok', warn: 'bg-warn-bg text-warn', bad: 'bg-bad-bg text-bad', brand: 'bg-paper text-maroon', test: 'bg-test-bg text-test' };
 
 /** Figure tile with a coloured icon bubble. */

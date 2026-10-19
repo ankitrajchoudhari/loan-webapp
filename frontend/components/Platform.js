@@ -135,7 +135,7 @@ export function PlatformBillPopup() {
 export function BillRow({ b, children }) {
   const { t } = useTranslation();
   return (
-    <li className="rounded-2xl border border-line bg-white p-4">
+    <li className="surface p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-bold text-maroon">{t('platform.billNo', { n: b.billNo })}</span>
         <span className="font-semibold">{t(`m${b.month}`)} {b.year}</span>

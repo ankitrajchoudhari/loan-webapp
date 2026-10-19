@@ -236,7 +236,7 @@ function LoansTab({ id }) {
   return (
     <div className="space-y-3">
       {data.loans.map((l) => (
-        <Link key={l.id} href={`/admin/loans/${l.id}`} className="block rounded-2xl border border-line bg-white p-4 hover:border-brand/50">
+        <Link key={l.id} href={`/admin/loans/${l.id}`} className="block surface p-4 hover:-translate-y-0.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-lg font-semibold">{t('loan.no', { n: l.loanNo })} · {money(l.principalPaise)}</span>
             {l.position.closed ? <Badge tone="ok" icon="check">{t('loan.closed')}</Badge> : <Badge tone="warn">{t('loan.running')}</Badge>}

@@ -40,7 +40,7 @@ export default function Loans() {
           <ul className="space-y-2">
             {loans.map((l) => (
               <li key={l.id}>
-                <Link href={`/admin/loans/${l.id}`} className="block rounded-2xl border border-line bg-white p-4 transition hover:border-brand/50">
+                <Link href={`/admin/loans/${l.id}`} className="block surface p-4 transition hover:-translate-y-0.5">
                   <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 text-lg font-semibold">
