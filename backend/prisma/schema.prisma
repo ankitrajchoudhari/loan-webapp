@@ -346,6 +346,9 @@ model Payment {
   gatewayOrderId   String?   @unique @map("gateway_order_id") @db.VarChar(60)
   gatewayPaymentId String?   @unique @map("gateway_payment_id") @db.VarChar(60)
   upiId         String?   @map("upi_id") @db.VarChar(100)
+  /// what it is for: all (everything due) | installment (installments only) | loan (one loan: EMI, advance EMIs or settlement)
+  purpose       String    @default("all") @db.VarChar(12)
+  loanId        String?   @map("loan_id") @db.Uuid
   /// dues at the time the member opened the payment
   dueSnapshot   Json?     @map("due_snapshot")
   /// how the money was applied: [{ kind, month, year, loanNo, amountPaise, ... }], plus credit before/after

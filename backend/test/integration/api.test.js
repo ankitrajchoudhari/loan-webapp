@@ -857,3 +857,54 @@ test('top-up: ₹45,000 loan, 11 × (₹2,000 + ₹225), then ₹25,000 more →
   const dash2 = (await admin('GET', '/dashboard', undefined, { expect: 200 })).data;
   assert.equal(dash2.loansGivenPaise - dash0.loansGivenPaise, 4500000, 'only the first ₹45,000 is lent now');
 });
+
+test('member pay options: installments only, one loan EMI, EMIs in advance, settlement closes the loan — each applied only where chosen', async () => {
+  const c = await admin('POST', '/members', { fullName: 'भुगतान विकल्प', mobileNumber: '9870000001', joinDate: dateIn(3, 1), dateOfBirth: '1979-09-09', monthlyInstallmentPaise: '1000' }, { expect: 201 });
+  const mid = c.data.member.id;
+  // ₹12,000 flat 1% a month = ₹120 interest, 12 EMIs of ₹1,120, interest from 2 months ago
+  const loan = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(3, 10), principalPaise: '12000', interestMethod: 'flat', rateBp: '1', ratePeriod: 'month', installmentPaise: '1120', termMonths: 12 }, { expect: 201 });
+  const LID = loan.data.loan.id;
+  const m = agent();
+  await m('POST', '/auth/login', { mobile: '9870000001', dateOfBirth: '1979-09-09' }, { expect: 200 });
+  const pay = async (body) => {
+    const p = await m('POST', '/pay', { method: 'cash', ...body }, { expect: 201 });
+    const r = await admin('POST', `/payments/${p.data.payment.id}/confirm`, {}, { expect: 200 });
+    return r.data.payment.allocation;
+  };
+  const s1 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  const acct = s1.loans.find((l) => l.loanId === LID);
+  assert.equal(acct.installmentPaise, 112000);
+  assert.ok(acct.dueNowPaise > 0, 'EMIs are due');
+  await m('POST', '/pay', { method: 'cash', amountPaise: '100', purpose: 'loan', loanId: ids.a }, { expect: 400 }); // not a loan id
+
+  // installments only: no loan repayment made
+  const a1 = await pay({ amountPaise: String(s1.dues.installmentPaise / 100), purpose: 'installment' });
+  assert.ok(a1.lines.every((l) => l.kind === 'installment'));
+  const s2 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
+  assert.equal(s2.dues.installmentPaise, 0);
+  assert.equal(s2.loans[0].dueNowPaise, acct.dueNowPaise, 'loan untouched');
+
+  // this loan's EMIs due now: interest first, then principal
+  const a2 = await pay({ amountPaise: String(acct.dueNowPaise / 100), purpose: 'loan', loanId: LID });
+  assert.equal(a2.lines.length, 1);
+  assert.equal(a2.lines[0].kind, 'loan');
+  assert.equal(a2.lines[0].principalPaise + a2.lines[0].interestPaise, acct.dueNowPaise);
+  const s3 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data.loans[0];
+  assert.equal(s3.dueNowPaise, 0, 'up to date');
+
+  // 2 EMIs in advance: recorded on the loan now, nothing becomes credit
+  const a3 = await pay({ amountPaise: String((2 * 112000) / 100), purpose: 'loan', loanId: LID });
+  assert.equal(a3.creditAfterPaise, 0);
+  const s4 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data.loans[0];
+  assert.equal(s4.payoffPaise, s3.payoffPaise - 224000);
+
+  // settlement: exactly what clears it today → loan closed; more than that → the rest is advance credit
+  const a4 = await pay({ amountPaise: String((s4.payoffPaise + 50000) / 100), purpose: 'loan', loanId: LID });
+  assert.equal(a4.lines[0].settled, true);
+  assert.equal(a4.lines[0].amountPaise, s4.payoffPaise);
+  assert.equal(a4.creditAfterPaise, 50000, 'the extra ₹500 is kept as advance');
+  const done = (await admin('GET', `/loans/${LID}`, undefined, { expect: 200 })).data.loan.position;
+  assert.equal(done.totalOutstandingPaise, 0);
+  assert.ok(done.closed);
+  assert.equal((await m('GET', '/pay/summary', undefined, { expect: 200 })).data.loans.length, 0, 'no running loan left');
+});

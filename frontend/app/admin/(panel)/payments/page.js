@@ -68,6 +68,7 @@ export default function Payments() {
                 <span className="font-bold text-maroon">#{p.paymentNo}</span>
                 <span className="font-semibold">{p.member?.fullName}</span>
                 <span className="num text-sm text-muted">({t('field.memberNo')} {p.member?.memberNo})</span>
+                {p.purpose && p.purpose !== 'all' && <Badge tone="brand">{t(`pay.purpose.${p.purpose}`)}</Badge>}
                 <Badge tone={TONE[p.status]} className="ml-auto">{t(`payStatus.${p.status}`)}</Badge>
               </div>
               <div className="num mt-1 text-sm text-muted">

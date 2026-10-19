@@ -13,7 +13,7 @@ import { audit } from '../lib/audit.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
 import { SUPPORT_NAME, notifyStaffWith } from '../lib/notify.js';
 import { publicMember } from '../lib/ledger.js';
-import { loadMemberForPay, duesOf, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
+import { loadMemberForPay, duesOf, loanAccounts, paymentView, nextPaymentNo, applyPayment, paidDateOf } from '../lib/payments.js';
 import { decodePhoto } from '../lib/kyc.js';
 import { screenshotHash, memberFeePaise, setMemberFeePaise } from '../lib/platform.js';
 
@@ -54,6 +54,8 @@ async function refreshOpenPayments(memberId) {
   const dues = duesOf(member);
   const fee = await memberFeePaise();
   for (const p of open) {
+    // only "pay everything due" follows the dues; an EMI / advance / settlement keeps its amount
+    if ((p.purpose ?? 'all') !== 'all') continue;
     const wasAllDues = p.dueSnapshot && p.amountPaise === p.dueSnapshot.payablePaise;
     if (!wasAllDues) continue;
     if (dues.payablePaise < 100) {
@@ -74,6 +76,7 @@ memberPay.get('/summary', async (req, res) => {
   res.json({
     member: publicMember(member),
     dues: duesOf(member),
+    loans: loanAccounts(member),
     feePaise: await memberFeePaise(),
     upi: upi ? { upiId: upi.upiId, payeeName: upi.payeeName, qrImage: upi.qrImage } : null,
     open: open.map((p) => paymentView(p)),
@@ -87,8 +90,14 @@ memberPay.get('/history', async (req, res) => {
 
 memberPay.post('/', async (req, res) => {
   const memberId = requireMember(req);
-  const body = validate(z.object({ method: z.enum(['upi', 'cash']), amountPaise: moneyField({ min: 100, max: 100_000_000 }) }), req.body);
+  const body = validate(z.object({
+    method: z.enum(['upi', 'cash']),
+    amountPaise: moneyField({ min: 100, max: 100_000_000 }),
+    purpose: z.enum(['all', 'installment', 'loan']).default('all'),
+    loanId: z.string().uuid().optional(),
+  }), req.body);
   const member = await loadMemberForPay(prisma, memberId);
+  if (body.purpose === 'loan' && !loanAccounts(member).some((l) => l.loanId === body.loanId)) throw new HttpError(400, 'loan_not_found');
   const upi = await upiConfig();
   if (body.method === 'upi' && !upi?.upiId) throw new HttpError(400, 'upi_not_set');
   // one open request at a time keeps things simple for members and staff
@@ -100,6 +109,8 @@ memberPay.post('/', async (req, res) => {
       paymentNo: await nextPaymentNo(prisma),
       memberId,
       method: body.method,
+      purpose: body.purpose,
+      loanId: body.purpose === 'loan' ? body.loanId : null,
       // amountPaise goes to the member's dues; the fee is recorded separately and never touches the books
       amountPaise: body.amountPaise,
       feePaise: fee,

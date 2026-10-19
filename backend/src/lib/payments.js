@@ -7,7 +7,7 @@
 import { prisma } from './db.js';
 import { HttpError, ym, iso, todayIST, currentMonthYear, parseDate } from './util.js';
 import { installmentArrears, publicMember } from './ledger.js';
-import { loanInsights, suggestSplit } from './loan.js';
+import { loanInsights, loanPosition, suggestSplit } from './loan.js';
 import { createInstallment } from './installments.js';
 import { createRepayment } from './loans.js';
 import { audit } from './audit.js';
@@ -51,9 +51,31 @@ export function duesOf(member) {
   };
 }
 
+/**
+ * Each running loan as the member sees it on the Pay page: EMI due now, how much clears it today
+ * (settlement), and the agreed EMI for paying ahead.
+ */
+export function loanAccounts(member) {
+  const now = currentMonthYear();
+  const k = ym(now.year, now.month);
+  return member.loans.map((l) => {
+    const pos = loanPosition(l, l.repayments, k);
+    const ins = loanInsights(l, l.repayments, k);
+    if (!pos || pos.closed) return null;
+    return {
+      loanId: l.id, loanNo: l.loanNo, principalPaise: l.principalPaise, installmentPaise: l.installmentPaise, termMonths: l.termMonths ?? null,
+      dueNowPaise: ins?.dueNowPaise ?? 0, overduePaise: ins?.overduePaise ?? 0, monthsBehind: ins?.monthsBehind ?? 0,
+      principalOutstandingPaise: pos.principalOutstandingPaise, interestOutstandingPaise: pos.interestOutstandingPaise,
+      payoffPaise: Math.max(0, pos.totalOutstandingPaise), monthPaidPaise: pos.monthPaidPaise, payoff: ins?.plan?.payoff ?? null,
+    };
+  }).filter(Boolean);
+}
+
 export function paymentView(p, { names } = {}) {
   return {
     id: p.id,
+    purpose: p.purpose ?? 'all',
+    loanId: p.loanId ?? null,
     paymentNo: p.paymentNo,
     memberId: p.memberId,
     member: p.member ? publicMember(p.member) : undefined,
@@ -94,9 +116,10 @@ export async function applyPayment(tx, req, payment, paidOn) {
   const method = payment.method === 'upi' ? 'upi' : 'cash';
   const dues = duesOf(member);
   const date = iso(paidOn);
+  const purpose = payment.purpose ?? 'all';
 
-  // 1. samiti installments, oldest first
-  for (const due of dues.installments) {
+  // 1. samiti installments, oldest first (purpose "all" or "installment")
+  for (const due of purpose === 'loan' ? [] : dues.installments) {
     if (available <= 0) break;
     const pay = Math.min(available, due.pendingPaise);
     const existing = member.installments.find((i) => i.month === due.month && i.year === due.year);
@@ -117,8 +140,28 @@ export async function applyPayment(tx, req, payment, paidOn) {
     available -= pay;
   }
 
-  // 2. loan dues, interest first
-  for (const due of dues.loans) {
+  // 2a. one chosen loan (purpose "loan"): this month's EMI, EMIs in advance, or the whole balance (settlement).
+  //     Interest due first, then principal, never more than the loan still owes; anything above → advance credit.
+  if (purpose === 'loan') {
+    const loan = member.loans.find((l) => l.id === payment.loanId);
+    if (loan && available > 0) {
+      const split = suggestSplit(loan, loan.repayments, parseDate(date), available);
+      const total = split.interestPaise + split.principalPaise;
+      if (total > 0) {
+        const settles = split.principalPaise >= split.principalOutstanding && split.interestPaise >= Math.max(0, split.interestOutstanding);
+        const r = await createRepayment(tx, loan, {
+          paidOn: date, totalPaise: total, principalPaise: split.principalPaise, interestPaise: split.interestPaise, method,
+          note: settles ? `${note} — कर्ज पूरा चुकाया (सेटलमेंट)` : note,
+        }, { allowDuplicate: true });
+        await audit(req, { action: 'repayment_added', entity: 'repayment', entityId: r.id, memberId: member.id, after: { loanNo: loan.loanNo, totalPaise: r.totalPaise, note: r.note } }, tx);
+        lines.push({ kind: 'loan', loanNo: loan.loanNo, amountPaise: total, principalPaise: split.principalPaise, interestPaise: split.interestPaise, settled: settles });
+        available -= total;
+      }
+    }
+  }
+
+  // 2. loan dues, interest first (purpose "all")
+  for (const due of purpose === 'all' ? dues.loans : []) {
     if (available <= 0) break;
     const loan = member.loans.find((l) => l.id === due.loanId);
     const pay = Math.min(available, due.dueNowPaise);

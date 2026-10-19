@@ -87,21 +87,111 @@ function Outcome({ payment }) {
   );
 }
 
+/**
+ * What does the member want to pay? This month's installment (or older unpaid ones), a loan's EMI,
+ * EMIs in advance, the whole loan (settlement), or everything due at once. Then UPI or cash.
+ */
 function NewPayment({ data, onCreated }) {
   const { t } = useTranslation();
+  const [choice, setChoice] = useState(null); // { purpose, loanId?, amountPaise, title, fixed }
+  if (choice) return <PayForm data={data} choice={choice} onBack={() => setChoice(null)} onCreated={onCreated} />;
+  return <PayOptions data={data} onChoose={setChoice} />;
+}
+
+function PayOptions({ data, onChoose }) {
+  const { t } = useTranslation();
   const { dues } = data;
+  const loans = data.loans ?? [];
+  const instDue = dues.installmentPaise;
+  return (
+    <div className="space-y-3">
+      {/* installments */}
+      <Card title={t('pay.instTitle')} icon="calendar">
+        {instDue > 0 ? (
+          <div className="space-y-2">
+            {dues.installments.map((i) => (
+              <Row key={`${i.year}-${i.month}`} label={`${t('history.installmentFor', { month: t(`m${i.month}`), year: i.year })}${i.partial ? ` (${t('status.partial')})` : ''}`} value={money(i.pendingPaise)} tone="bad" />
+            ))}
+            <Button variant="success" full icon="wallet" onClick={() => onChoose({ purpose: 'installment', amountPaise: Math.max(100, instDue - Math.min(dues.creditPaise, instDue)), title: t('pay.instTitle') })}>
+              {t('pay.payInstallment', { amount: money(Math.max(0, instDue - Math.min(dues.creditPaise, instDue))) })}
+            </Button>
+          </div>
+        ) : (
+          <p className="flex items-center gap-2 rounded-xl bg-ok-bg px-3 py-2.5 font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{t('pay.instPaid')}</p>
+        )}
+      </Card>
+
+      {/* each running loan */}
+      {loans.map((l) => <LoanPayCard key={l.loanId} l={l} onChoose={onChoose} />)}
+
+      {/* everything at once */}
+      {dues.payablePaise > 0 && (instDue > 0 && loans.some((l) => l.dueNowPaise > 0)) && (
+        <Button variant="secondary" full icon="receipt" onClick={() => onChoose({ purpose: 'all', amountPaise: dues.payablePaise, title: t('pay.allTitle'), editable: true })}>
+          {t('pay.payAll', { amount: money(dues.payablePaise) })}
+        </Button>
+      )}
+      {dues.creditPaise > 0 && <p className="text-center text-sm text-ok">{t('pay.creditHave', { amount: money(dues.creditPaise) })}</p>}
+    </div>
+  );
+}
+
+function LoanPayCard({ l, onChoose }) {
+  const { t } = useTranslation();
+  const [ahead, setAhead] = useState(1);
+  const emi = l.installmentPaise;
+  const maxAhead = emi > 0 ? Math.max(1, Math.ceil(l.payoffPaise / emi)) : 1;
+  const aheadPaise = Math.min(l.payoffPaise, emi * ahead);
+  return (
+    <Card title={t('pay.loanTitle', { n: l.loanNo })} icon="handCoins">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-xl bg-stone-50 p-2"><div className="text-muted">{t('pay.loanLeftNow')}</div><div className="num text-lg font-bold">{money(l.payoffPaise)}</div></div>
+          <div className="rounded-xl bg-stone-50 p-2"><div className="text-muted">{t('loans.installment')}</div><div className="num text-lg font-bold">{emi ? money(emi) : '—'}</div></div>
+        </div>
+        {l.dueNowPaise > 0 ? (
+          <Button variant="success" full icon="wallet" onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: l.dueNowPaise, title: t('pay.emiTitle', { n: l.loanNo }) })}>
+            {l.overduePaise > 0 ? t('pay.payEmiOverdue', { amount: money(l.dueNowPaise), n: l.monthsBehind }) : t('pay.payEmi', { amount: money(l.dueNowPaise) })}
+          </Button>
+        ) : (
+          <p className="flex items-center gap-2 rounded-xl bg-ok-bg px-3 py-2.5 font-semibold text-ok"><Icon name="checkCircle" className="size-5" />{t('pay.emiPaid')}</p>
+        )}
+        {emi > 0 && l.payoffPaise > emi && (
+          <div className="rounded-2xl border border-line p-3">
+            <div className="mb-2 font-semibold">{t('pay.advanceTitle')}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {[1, 2, 3, 6].filter((n) => n <= maxAhead).map((n) => (
+                <button key={n} type="button" onClick={() => setAhead(n)} className={`min-h-10 rounded-xl border-2 px-3 font-semibold ${ahead === n ? 'border-maroon bg-maroon text-white' : 'border-line bg-white'}`}>{t('pay.nEmis', { n })}</button>
+              ))}
+            </div>
+            <Button variant="secondary" full className="mt-2" icon="calendarCheck"
+              onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: aheadPaise, title: t('pay.advanceFor', { n: l.loanNo, count: ahead }) })}>
+              {t('pay.payAdvance', { amount: money(aheadPaise), n: ahead })}
+            </Button>
+          </div>
+        )}
+        <Button full icon="checkCircle"
+          onClick={() => onChoose({ purpose: 'loan', loanId: l.loanId, amountPaise: l.payoffPaise, title: t('pay.settleTitle', { n: l.loanNo }), settle: l })}>
+          {t('pay.settle', { amount: money(l.payoffPaise) })}
+        </Button>
+        <p className="text-center text-xs text-muted">{t('pay.settleHint', { principal: money(l.principalOutstandingPaise), interest: money(Math.max(0, l.interestOutstandingPaise)) })}</p>
+      </div>
+    </Card>
+  );
+}
+
+function PayForm({ data, choice, onBack, onCreated }) {
+  const { t } = useTranslation();
   const feePaise = data.feePaise ?? 0;
-  const [amount, setAmount] = useState(dues.payablePaise ? rupeesText(dues.payablePaise) : '');
+  const [amount, setAmount] = useState(rupeesText(choice.amountPaise));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const amountPaise = toPaise(amount) ?? 0;
-  const diff = amountPaise - dues.payablePaise;
+  const amountPaise = choice.editable ? toPaise(amount) ?? 0 : choice.amountPaise;
 
   const start = async (method) => {
     setBusy(true);
     setError(null);
     try {
-      await api('/pay', { method: 'POST', body: { method, amountPaise: amount } });
+      await api('/pay', { method: 'POST', body: { method, amountPaise: rupeesText(amountPaise), purpose: choice.purpose, loanId: choice.loanId } });
       await onCreated();
     } catch (e) {
       setError(e);
@@ -111,51 +201,38 @@ function NewPayment({ data, onCreated }) {
   };
 
   return (
-    <>
-      <Card title={t('pay.dues')} icon="wallet">
-        {dues.installments.map((i) => (
-          <Row key={`${i.year}-${i.month}`} label={`${t('history.installmentFor', { month: t(`m${i.month}`), year: i.year })}${i.partial ? ` (${t('status.partial')})` : ''}`} value={money(i.pendingPaise)} />
-        ))}
-        {dues.loans.map((l) => (
-          <Row key={l.loanId} label={t('pay.loanDue', { n: l.loanNo })} sub={l.overduePaise ? t('pay.loanOverdue', { amount: money(l.overduePaise) }) : null} value={money(l.dueNowPaise)} />
-        ))}
-        {dues.creditPaise > 0 && <Row label={t('pay.creditUsed')} value={`− ${money(Math.min(dues.creditPaise, dues.grossPaise))}`} tone="ok" />}
-        <Row label={t('pay.payable')} value={money(dues.payablePaise)} strong tone={dues.payablePaise ? 'bad' : 'ok'} />
-        {dues.grossPaise === 0 && <p className="mt-2 font-semibold text-ok">{t('pay.nothingDue')}</p>}
-        {dues.creditPaise > dues.grossPaise && <p className="mt-2 text-sm text-ok">{t('pay.creditLeft', { amount: money(dues.creditPaise - dues.grossPaise) })}</p>}
-      </Card>
-
-      <Card title={t('pay.howMuch')} icon="calculator">
-        <div className="space-y-3">
-          <Field label={t('pay.amount')} hint={t('pay.amountHint')}>
-            <MoneyInput value={amount} onChange={setAmount} />
-          </Field>
-          {amountPaise > 0 && diff > 0 && <Notice tone="ok" icon="check">{t('pay.moreThanDue', { amount: money(diff) })}</Notice>}
-          {amountPaise > 0 && diff < 0 && <Notice>{t('pay.lessThanDue', { amount: money(-diff) })}</Notice>}
-          <div className="rounded-xl bg-stone-50 px-3 py-2">
-            {feePaise > 0 && <Row label={t('pay.toSamiti')} value={money(amountPaise)} />}
-            {feePaise > 0 && <Row label={t('pay.fee')} value={money(feePaise)} />}
-            <Row label={t('pay.total')} value={money(amountPaise + feePaise)} strong />
-          </div>
-          {error && <ErrorBox error={error} />}
-          <div className="space-y-2 pt-1">
-            {data.upi && (
-              <button type="button" disabled={busy || amountPaise < 100} onClick={() => start('upi')}
-                className="flex w-full items-center gap-3 rounded-2xl bg-ok px-4 py-3.5 text-left text-white shadow-md transition hover:brightness-95 disabled:opacity-60">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/15"><Icon name="wallet" className="size-6" /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold leading-tight">{t('pay.upiApp', { amount: money(amountPaise + feePaise) })}</span>
-                  <span className="block text-sm text-white/85">{t('pay.upiAppSub')}</span>
-                </span>
-                <Icon name="chevronRight" className="size-5 shrink-0" />
-              </button>
-            )}
-            <Button variant="secondary" full icon="handCoins" loading={busy} disabled={amountPaise < 100} onClick={() => start('cash')}>{t('pay.byCash')}</Button>
-          </div>
-          {!data.upi && <p className="text-sm text-muted">{t('pay.upiNotSet')}</p>}
+    <Card title={choice.title} icon="calculator">
+      <div className="space-y-3">
+        {choice.settle && (
+          <Notice tone="brand" icon="checkCircle">
+            {t('pay.settleExplain', { principal: money(choice.settle.principalOutstandingPaise), interest: money(Math.max(0, choice.settle.interestOutstandingPaise)), total: money(choice.settle.payoffPaise) })}
+          </Notice>
+        )}
+        {choice.editable ? (
+          <Field label={t('pay.amount')} hint={t('pay.amountHint')}><MoneyInput value={amount} onChange={setAmount} /></Field>
+        ) : null}
+        <div className="rounded-xl bg-stone-50 px-3 py-2">
+          <Row label={feePaise > 0 ? t('pay.toSamiti') : t('pay.total')} value={money(amountPaise)} strong={!feePaise} />
+          {feePaise > 0 && <Row label={t('pay.fee')} value={money(feePaise)} />}
+          {feePaise > 0 && <Row label={t('pay.total')} value={money(amountPaise + feePaise)} strong />}
         </div>
-      </Card>
-    </>
+        {error && <ErrorBox error={error} />}
+        {data.upi && (
+          <button type="button" disabled={busy || amountPaise < 100} onClick={() => start('upi')}
+            className="flex w-full items-center gap-3 rounded-2xl bg-ok px-4 py-3.5 text-left text-white shadow-md transition hover:brightness-95 disabled:opacity-60">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/15"><Icon name="wallet" className="size-6" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold leading-tight">{t('pay.upiApp', { amount: money(amountPaise + feePaise) })}</span>
+              <span className="block text-sm text-white/85">{t('pay.upiAppSub')}</span>
+            </span>
+            <Icon name="chevronRight" className="size-5 shrink-0" />
+          </button>
+        )}
+        <Button variant="secondary" full icon="handCoins" loading={busy} disabled={amountPaise < 100} onClick={() => start('cash')}>{t('pay.byCash')}</Button>
+        {!data.upi && <p className="text-sm text-muted">{t('pay.upiNotSet')}</p>}
+        <Button variant="ghost" full icon="back" onClick={onBack}>{t('pay.chooseOther')}</Button>
+      </div>
+    </Card>
   );
 }
 
@@ -216,7 +293,7 @@ function OpenPayment({ payment, upi, dues, onChange }) {
           <Row label={t('pay.total')} value={money(p.totalPaise)} strong />
         </div>
 
-        {p.status === 'initiated' && dues && dues.payablePaise !== p.amountPaise && (
+        {p.status === 'initiated' && (p.purpose ?? 'all') === 'all' && dues && dues.payablePaise !== p.amountPaise && (
           <Notice tone="brand" icon="alert">
             {t('pay.duesNow', { dues: money(dues.payablePaise), amount: money(p.amountPaise) })}{' '}
             <button type="button" onClick={cancel} className="font-semibold underline underline-offset-4">{t('pay.changeAmount')}</button>
