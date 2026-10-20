@@ -97,7 +97,8 @@ export default function LoanTerms({ f, setF, showOld = true, autoEmi = true }) {
   const { t } = useTranslation();
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const [ty, tm] = (f.takenOn || '').split('-').map(Number);
-  const nextAfterTaken = tm === 12 ? { month: 1, year: ty + 1 } : { month: tm + 1, year: ty };
+  // interest starts in the loan month itself, as in the samiti's register (matches the backend default)
+  const fromTaken = { month: tm, year: ty };
 
   return (
     <div className="space-y-5">
@@ -142,16 +143,16 @@ export default function LoanTerms({ f, setF, showOld = true, autoEmi = true }) {
         </div>
       )}
 
-      <Field label={t('loans.interestFrom')} hint={!f.customFrom ? t('loans.interestFromDefault', { month: t(`m${nextAfterTaken.month}`), year: nextAfterTaken.year }) : null}>
+      <Field label={t('loans.interestFrom')} hint={!f.customFrom ? t('loans.interestFromDefault', { month: t(`m${fromTaken.month}`), year: fromTaken.year }) : null}>
         <Segmented
           value={f.customFrom ? 'custom' : 'default'}
-          onChange={(v) => setF((s) => ({ ...s, customFrom: v === 'custom', interestFrom: s.interestFrom ?? nextAfterTaken }))}
+          onChange={(v) => setF((s) => ({ ...s, customFrom: v === 'custom', interestFrom: s.interestFrom ?? fromTaken }))}
           options={[{ value: 'default', label: t('loans.fromNextMonth') }, { value: 'custom', label: t('loans.fromChosen') }]}
           size="sm"
         />
         {f.customFrom && (
           <div className="mt-2">
-            <MonthYearSelect month={f.interestFrom?.month ?? nextAfterTaken.month} year={f.interestFrom?.year ?? nextAfterTaken.year} onChange={set('interestFrom')} />
+            <MonthYearSelect month={f.interestFrom?.month ?? fromTaken.month} year={f.interestFrom?.year ?? fromTaken.year} onChange={set('interestFrom')} />
           </div>
         )}
       </Field>

@@ -195,12 +195,14 @@ export function checkRepayment(loan, others, entry) {
   return { errors, warnings };
 }
 
-/** Default "interest from" month: the month after the loan is taken. */
+/**
+ * Default "interest from" month: the month the loan is taken. The samiti's register charges that
+ * month's interest too (loan on 10 April → the 10 April payment is principal + one month's interest).
+ * Top-ups are the exception: the old loan already charged the top-up month, so they start next month.
+ */
 export function defaultInterestFrom(takenOn) {
   const d = new Date(takenOn);
-  const m = d.getUTCMonth() + 1;
-  const y = d.getUTCFullYear();
-  return m === 12 ? { month: 1, year: y + 1 } : { month: m + 1, year: y };
+  return { month: d.getUTCMonth() + 1, year: d.getUTCFullYear() };
 }
 
 /** Suggested split for a payment: clear interest due first, the rest goes to principal. */

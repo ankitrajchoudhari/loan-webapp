@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/db.js';
-import { HttpError, validate, moneyField, reasonField, blankToNull, dateField, isFutureDate, todayIST, iso, currentMonthYear, nextMonth } from '../lib/util.js';
+import { HttpError, validate, moneyField, reasonField, blankToNull, dateField, isFutureDate, todayIST, iso, currentMonthYear } from '../lib/util.js';
 import { audit } from '../lib/audit.js';
 import { getSettings } from '../lib/settings.js';
 import { notifyStaffWith } from '../lib/notify.js';
@@ -28,11 +28,10 @@ function requireLoanStaff(req) {
   if (!isLoanStaff(req)) throw new HttpError(403, 'forbidden');
 }
 
-/** The admin's default terms, as a loan-shaped object starting next month. */
+/** The admin's default terms, as a loan-shaped object; interest from the month the loan is given. */
 async function defaultTerms() {
   const s = await getSettings();
-  const { month, year } = currentMonthYear();
-  const from = nextMonth(month, year);
+  const from = currentMonthYear();
   return {
     interestMethod: s.defaultInterestMethod,
     rateBp: s.defaultInterestMethod === 'fixed' ? 0 : s.defaultRateBp,
@@ -279,7 +278,7 @@ router.get('/:id', async (req, res) => {
   requireLoanStaff(req);
   const a = await findApp(req.params.id);
   const terms = { interestMethod: a.interestMethod, rateBp: a.rateBp, ratePeriod: a.ratePeriod, fixedInterestPaise: a.fixedInterestPaise };
-  const from = nextMonth(currentMonthYear().month, currentMonthYear().year);
+  const from = currentMonthYear();
   res.json({ application: view(req, a, { full: true }), eligibility: await eligibility(a.memberId), plan: plan({ ...terms, interestFromMonth: from.month, interestFromYear: from.year }, a.amountPaise, a.months) });
 });
 

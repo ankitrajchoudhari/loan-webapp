@@ -17,6 +17,8 @@ const today = todayIST();
 const ym = (k) => ({ month: (k % 12) + 1, year: Math.floor(k / 12) });
 const nowK = now.year * 12 + now.month - 1;
 const monthsAgo = (n) => ym(nowK - n);
+// interest from the month after a loan date (these tests were written for that start; the default is now the loan month)
+const fromNext = (d) => { const [y, m] = d.split('-').map(Number); return m === 12 ? { interestFromMonth: 1, interestFromYear: y + 1 } : { interestFromMonth: m + 1, interestFromYear: y }; };
 const dateIn = (n, day = 5) => {
   const { month, year } = monthsAgo(n);
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -123,9 +125,9 @@ test('installment correction needs a reason, keeps the old values in history; ca
 
 test('loan: create with reducing interest, repay principal + interest separately, balances add up', async () => {
   const taken = dateIn(3, 10);
-  const pv = await admin('POST', '/loans/preview', { memberId: ids.a, takenOn: taken, principalPaise: '10000', interestMethod: 'reducing', rateBp: '2', installmentPaise: '1000' }, { expect: 200 });
+  const pv = await admin('POST', '/loans/preview', { memberId: ids.a, takenOn: taken, principalPaise: '10000', interestMethod: 'reducing', rateBp: '2', installmentPaise: '1000', ...fromNext(taken) }, { expect: 200 });
   assert.equal(pv.data.firstMonthInterestPaise, 20000);
-  const l = await admin('POST', '/loans', { memberId: ids.a, takenOn: taken, principalPaise: '10000', interestMethod: 'reducing', rateBp: '2', installmentPaise: '1000' }, { expect: 201 });
+  const l = await admin('POST', '/loans', { memberId: ids.a, takenOn: taken, principalPaise: '10000', interestMethod: 'reducing', rateBp: '2', installmentPaise: '1000', ...fromNext(taken) }, { expect: 201 });
   ids.loan = l.data.loan.id;
   assert.equal(l.data.loan.loanNo, 1);
 
@@ -246,7 +248,7 @@ test('historical old loan + repayments in one batch post together', async () => 
   const b = await admin('POST', '/history/batches', { title: 'पुराना कर्ज' }, { expect: 201 });
   const bid = b.data.batch.id;
   const add = (kind, data) => admin('POST', `/history/batches/${bid}/rows`, { kind, data, verified: true }, { expect: 201 });
-  await add('loan', { memberNo: '2', takenOn: dateIn(5, 3), principal: '5000', interestMethod: 'flat', rate: '1', openingInterest: '100' });
+  await add('loan', { memberNo: '2', takenOn: dateIn(5, 3), principal: '5000', interestMethod: 'flat', rate: '1', openingInterest: '100', interestFromMonth: String(fromNext(dateIn(5, 3)).interestFromMonth), interestFromYear: String(fromNext(dateIn(5, 3)).interestFromYear) });
   await add('repayment', { memberNo: '2', paidOn: dateIn(3, 3), total: '1150', principal: '1000', interest: '150' });
   const posted = await admin('POST', `/history/batches/${bid}/post`, {}, { expect: 200 });
   assert.deepEqual(posted.data.posted, { installment: 0, loan: 1, repayment: 1 });
@@ -807,7 +809,7 @@ test('top-up: ₹45,000 loan, 11 × (₹2,000 + ₹225), then ₹25,000 more →
   const dash0 = (await admin('GET', '/dashboard', undefined, { expect: 200 })).data;
 
   // loan 1: taken 20 months ago, flat 0.5% a month = ₹225
-  const l1 = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(20, 10), principalPaise: '45000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '2225' }, { expect: 201 });
+  const l1 = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(20, 10), principalPaise: '45000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '2225', ...fromNext(dateIn(20, 10)) }, { expect: 201 });
   const L1 = l1.data.loan.id;
   for (let i = 19; i >= 9; i--) {
     await admin('POST', `/loans/${L1}/repayments`, { paidOn: dateIn(i, 10), totalPaise: '2225', principalPaise: '2000', interestPaise: '225', method: 'cash' }, { expect: 201 });
@@ -945,4 +947,21 @@ test('member loan history shows the top-up story; a receipt keeps the balances r
   assert.ok(after, 'balances saved with the payment');
   assert.equal(typeof after.installmentPendingPaise, 'number');
   assert.ok(after.loans.some((x) => x.loanNo === newer.loanNo && x.principalOutstandingPaise === 1300000), 'running loan balance shown');
+});
+
+
+test('default interest start is the loan month: loan on the 10th, same-day EMI = principal + that month’s interest (register: ₹70,000 at 0.5% → ₹5,000 + ₹350)', async () => {
+  const mid = (await admin('POST', '/members', { fullName: 'रजिस्टर जाँच', mobileNumber: '9812345670', joinDate: dateIn(4, 1), dateOfBirth: '1980-01-01', monthlyInstallmentPaise: '1000' }, { expect: 201 })).data.member.id;
+  const taken = dateIn(2, 10);
+  const l = await admin('POST', '/loans', { memberId: mid, takenOn: taken, principalPaise: '70000', interestMethod: 'flat', rateBp: '0.5', ratePeriod: 'month', installmentPaise: '5350', termMonths: 14 }, { expect: 201 });
+  const [y, m] = taken.split('-').map(Number);
+  assert.equal(l.data.loan.interestFromMonth, m);
+  assert.equal(l.data.loan.interestFromYear, y);
+  const sp = await admin('POST', `/loans/${l.data.loan.id}/split`, { paidOn: taken, totalPaise: '5350' }, { expect: 200 });
+  assert.equal(sp.data.interestPaise, 35000, 'the loan month already carries ₹350 interest');
+  assert.equal(sp.data.principalPaise, 500000);
+  await admin('POST', `/loans/${l.data.loan.id}/repayments`, { paidOn: taken, totalPaise: '5350', principalPaise: '5000', interestPaise: '350' }, { expect: 201 });
+  const d = await admin('GET', `/loans/${l.data.loan.id}`, undefined, { expect: 200 });
+  assert.equal(d.data.loan.position.principalOutstandingPaise, 6500000);
+  assert.equal(d.data.loan.position.interestOutstandingPaise, 70000, 'loan month paid; the 2 months since are ₹350 each');
 });
