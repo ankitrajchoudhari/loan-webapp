@@ -169,9 +169,9 @@ test('installments and loan repayments stay separate', async () => {
 
 test('member login: only admin-added mobile + correct date of birth; member sees only own account', async () => {
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-16' }, { expect: 401 });
-  await m('POST', '/auth/login', { mobile: '9000012345', dateOfBirth: '1970-03-15' }, { expect: 401 });
-  const ok = await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-16', code: '0100' }, { expect: 401 });
+  await m('POST', '/auth/login', { mobile: '9000012345', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 401 });
+  const ok = await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
   assert.equal(ok.data.user.fullName, 'रामलाल शर्मा');
   const home = await m('GET', '/statements/me/home', undefined, { expect: 200 });
   assert.equal(home.data.member.memberNo, 1);
@@ -280,11 +280,11 @@ test('spreadsheet import: mapping, validation and duplicate detection preview be
 });
 
 test('member deactivation keeps records; inactive member cannot log in', async () => {
-  await agent()('POST', '/auth/login', { mobile: '9822222222', dateOfBirth: '1972-08-01' }, { expect: 200 });
+  await agent()('POST', '/auth/login', { mobile: '9822222222', dateOfBirth: '1972-08-01', code: '0100' }, { expect: 200 });
   await admin('POST', `/members/${ids.b}/deactivate`, { reason: 'समिति छोड़ दी' }, { expect: 200 });
   const st = await admin('GET', `/statements/${ids.b}/history`, undefined, { expect: 200 });
   assert.ok(st.data.deposits.length > 0);
-  await agent()('POST', '/auth/login', { mobile: '9822222222', dateOfBirth: '1972-08-01' }, { expect: 401 });
+  await agent()('POST', '/auth/login', { mobile: '9822222222', dateOfBirth: '1972-08-01', code: '0100' }, { expect: 401 });
 });
 
 test('practice data is a separate database and resets without touching live records', async () => {
@@ -313,8 +313,8 @@ test('team: developer adds admin, admin adds sub-admin with work areas; sub-admi
   const s = agent();
   const id = await s('POST', '/auth/identify', { mobile: '9888800004' }, { expect: 200 });
   assert.equal(id.data.kind, 'subadmin');
-  await s('POST', '/auth/login', { mobile: '9888800004', dateOfBirth: '1990-04-05' }, { expect: 401 });
-  const me = await s('POST', '/auth/login', { mobile: '9888800004', dateOfBirth: '1990-04-04' }, { expect: 200 });
+  await s('POST', '/auth/login', { mobile: '9888800004', dateOfBirth: '1990-04-05', code: '0100' }, { expect: 401 });
+  const me = await s('POST', '/auth/login', { mobile: '9888800004', dateOfBirth: '1990-04-04', code: '0100' }, { expect: 200 });
   assert.equal(me.data.user.staffRole, 'subadmin');
   await s('GET', `/installments/sheet?month=${now.month}&year=${now.year}`, undefined, { expect: 200 });
   await s('GET', '/members', undefined, { expect: 200 });
@@ -399,7 +399,7 @@ test('payments: admin sets UPI; member pays by UPI with screenshot; confirm appl
   assert.equal(seen.data.upi.setBy.name, 'परीक्षक'); // developer can see who added it
 
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
   const s1 = await m('GET', '/pay/summary', undefined, { expect: 200 });
   assert.equal(s1.data.feePaise, 400, '₹4 platform fee on each member payment (developer can change it)');
   assert.equal(s1.data.upi.upiId, 'samiti@okaxis');
@@ -542,7 +542,7 @@ test('deleting a member erases everything; the mobile number is blocked for 7 da
   assert.equal(await db.auditLog.count({ where: { memberId: id } }), 0);
   const log = await db.auditLog.findFirst({ where: { action: 'member_deleted' } });
   assert.ok(!JSON.stringify(log).includes('9844444444') && !JSON.stringify(log).includes('मिटाने वाला'), 'no name or number left in the log');
-  await agent()('POST', '/auth/login', { mobile: '9844444444', dateOfBirth: '1980-01-01' }, { expect: 401 });
+  await agent()('POST', '/auth/login', { mobile: '9844444444', dateOfBirth: '1980-01-01', code: '0100' }, { expect: 401 });
 
   const again = { fullName: 'नया सदस्य', mobileNumber: '9844444444', joinDate: today, dateOfBirth: '1990-01-01', monthlyInstallmentPaise: '500' };
   const blocked = await admin('POST', '/members', again, { expect: 409 });
@@ -557,7 +557,7 @@ test('loan application: EMI plan from admin defaults; apply with Aadhaar/PAN/ban
   const fresh = await admin('POST', '/members', { fullName: 'नया आवेदक', mobileNumber: '9855555555', joinDate: dateIn(3, 1), dateOfBirth: '1985-01-01', monthlyInstallmentPaise: '1000' }, { expect: 201 });
   ids.applicant = fresh.data.member.id;
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9855555555', dateOfBirth: '1985-01-01' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9855555555', dateOfBirth: '1985-01-01', code: '0100' }, { expect: 200 });
   const who = await agent()('POST', '/auth/identify', { mobile: '9811111111' }, { expect: 200 });
   assert.equal(who.data.name, 'रामलाल शर्मा');
   assert.equal((await agent()('POST', '/auth/identify', { mobile: '9800000009' }, { expect: 200 })).data.found, false);
@@ -607,7 +607,7 @@ test('loan application: EMI plan from admin defaults; apply with Aadhaar/PAN/ban
 
 test('new loan only after 80% of the running loan is repaid; cancelling a loan also cancels its repayments', async () => {
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
   const terms = await m('GET', '/loan-apply/terms', undefined, { expect: 200 });
   assert.equal(terms.data.eligibility.ok, false, 'the loans from earlier tests are not 80% repaid');
   const jpeg = `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 7)]).toString('base64')}`;
@@ -629,7 +629,7 @@ test('new loan only after 80% of the running loan is repaid; cancelling a loan a
   }
   assert.equal((await m('GET', '/loan-apply/terms', undefined, { expect: 200 })).data.eligibility.ok, true);
   const applicant = agent();
-  await applicant('POST', '/auth/login', { mobile: '9855555555', dateOfBirth: '1985-01-01' }, { expect: 200 });
+  await applicant('POST', '/auth/login', { mobile: '9855555555', dateOfBirth: '1985-01-01', code: '0100' }, { expect: 200 });
   const mine = await applicant('GET', '/loan-apply/mine', undefined, { expect: 200 });
   assert.equal(mine.data.applications[0].status, 'cancelled', 'application of a cancelled loan shows as cancelled');
   await m('POST', '/loan-apply', form, { expect: 201 });
@@ -668,7 +668,7 @@ test('login help: anyone can ask the admin or developer; they get a notice, mark
   assert.equal(done.data.request.status, 'fixed');
   assert.equal(done.data.request.reply, 'जन्म तिथि ठीक कर दी, फिर से लॉगिन करें');
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
   await m('GET', '/help-requests', undefined, { expect: 403 }); // members can't see the list
 });
 
@@ -682,7 +682,7 @@ test('member platform fee: developer sets it; it is added on top, recorded apart
   assert.equal((await agent()('GET', '/auth/config', undefined, { expect: 200 })).data.memberFeePaise, 550, 'terms page can show it');
 
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
   const before = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
   assert.equal(before.feePaise, 550);
   const cash = await admin('POST', '/payments/cash', { memberId: ids.a, amountPaise: '123.45' }, { expect: 201 });
@@ -731,17 +731,17 @@ test('several accounts on one number: login lists them, the chosen account + its
   assert.equal(shared.data.sharedWith[0].fullName, 'बेटा');
 
   const a = agent();
-  const asBeta = await a('POST', '/auth/login', { mobile: '9866666666', memberId: beta.data.member.id, dateOfBirth: '1995-05-05' }, { expect: 200 });
+  const asBeta = await a('POST', '/auth/login', { mobile: '9866666666', memberId: beta.data.member.id, dateOfBirth: '1995-05-05', code: '0100' }, { expect: 200 });
   assert.equal(asBeta.data.user.id, beta.data.member.id);
   const home = await a('GET', '/statements/me/home', undefined, { expect: 200 });
   assert.equal(home.data.member.fullName, 'बेटा', 'each account sees only its own records');
-  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: papa.data.member.id, dateOfBirth: '1995-05-05' }, { expect: 401 }); // other account's DOB
-  const byDob = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1960-01-01' }, { expect: 200 });
+  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: papa.data.member.id, dateOfBirth: '1995-05-05', code: '0100' }, { expect: 401 }); // other account's DOB
+  const byDob = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1960-01-01', code: '0100' }, { expect: 200 });
   assert.equal(byDob.data.user.id, papa.data.member.id, 'no choice sent: the one account with that DOB');
-  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: ids.a, dateOfBirth: '1970-03-15' }, { expect: 401 }); // an account on another number
+  await agent()('POST', '/auth/login', { mobile: '9866666666', memberId: ids.a, dateOfBirth: '1970-03-15', code: '0100' }, { expect: 401 }); // an account on another number
 
   const twin = await admin('POST', '/members', { ...fam, fullName: 'जुड़वाँ', dateOfBirth: '1995-05-05' }, { expect: 201 });
-  const ask = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1995-05-05' }, { expect: 400 });
+  const ask = await agent()('POST', '/auth/login', { mobile: '9866666666', dateOfBirth: '1995-05-05', code: '0100' }, { expect: 400 });
   assert.equal(ask.data.error.code, 'choose_account');
 
   await admin('DELETE', `/members/${twin.data.member.id}`, { reason: 'गलती से', confirmName: 'जुड़वाँ' }, { expect: 200 });
@@ -752,7 +752,7 @@ test('an unpaid payment follows the dues: admin enters an installment → the op
   const c = await admin('POST', '/members', { fullName: 'बकाया जाँच', mobileNumber: '9877777777', joinDate: dateIn(2, 1), dateOfBirth: '1981-01-01', monthlyInstallmentPaise: '1000' }, { expect: 201 });
   const mid = c.data.member.id;
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9877777777', dateOfBirth: '1981-01-01' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9877777777', dateOfBirth: '1981-01-01', code: '0100' }, { expect: 200 });
   const s1 = (await m('GET', '/pay/summary', undefined, { expect: 200 })).data;
   const due = s1.dues.payablePaise;
   assert.ok(due >= 200000, 'at least two months due');
@@ -787,18 +787,18 @@ test('wrong logins: tries left are shown, the 5th locks with minutes; staff can 
   const c = await admin('POST', '/members', { fullName: 'लॉक जाँच', mobileNumber: '9878888888', joinDate: dateIn(2, 1), dateOfBirth: '1982-02-02', monthlyInstallmentPaise: '1000' }, { expect: 201 });
   const v = agent();
   for (let left = 4; left >= 1; left--) {
-    const r = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09' }, { expect: 401 });
+    const r = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09', code: '0100' }, { expect: 401 });
     assert.equal(r.data.error.details.left, left);
   }
-  const fifth = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09' }, { expect: 429 });
+  const fifth = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1999-09-09', code: '0100' }, { expect: 429 });
   assert.equal(fifth.data.error.code, 'locked');
   assert.equal(fifth.data.error.details.minutes, 15);
-  const right = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02' }, { expect: 429 }); // even the right DOB waits
+  const right = await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02', code: '0100' }, { expect: 429 }); // even the right DOB waits
   assert.ok(right.data.error.details.minutes >= 14);
   const seen = await admin('GET', `/members/${c.data.member.id}`, undefined, { expect: 200 });
   assert.ok(seen.data.member.lockedUntil, 'admin sees the lock');
   await admin('POST', `/members/${c.data.member.id}/unlock`, {}, { expect: 200 });
-  await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02' }, { expect: 200 });
+  await v('POST', '/auth/login', { mobile: '9878888888', dateOfBirth: '1982-02-02', code: '0100' }, { expect: 200 });
 });
 
 test('top-up: ₹45,000 loan, 11 × (₹2,000 + ₹225), then ₹25,000 more → one ₹48,000 loan; 8 × (₹2,000 + ₹240) → ₹32,000 left; cash counts only real money', async () => {
@@ -865,7 +865,7 @@ test('member pay options: installments only, one loan EMI, EMIs in advance, sett
   const loan = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(3, 10), principalPaise: '12000', interestMethod: 'flat', rateBp: '1', ratePeriod: 'month', installmentPaise: '1120', termMonths: 12 }, { expect: 201 });
   const LID = loan.data.loan.id;
   const m = agent();
-  await m('POST', '/auth/login', { mobile: '9870000001', dateOfBirth: '1979-09-09' }, { expect: 200 });
+  await m('POST', '/auth/login', { mobile: '9870000001', dateOfBirth: '1979-09-09', code: '0100' }, { expect: 200 });
   const pay = async (body) => {
     const p = await m('POST', '/pay', { method: 'cash', ...body }, { expect: 201 });
     const r = await admin('POST', `/payments/${p.data.payment.id}/confirm`, {}, { expect: 200 });
@@ -907,4 +907,15 @@ test('member pay options: installments only, one loan EMI, EMIs in advance, sett
   assert.equal(done.totalOutstandingPaise, 0);
   assert.ok(done.closed);
   assert.equal((await m('GET', '/pay/summary', undefined, { expect: 200 })).data.loans.length, 0, 'no running loan left');
+});
+
+
+test('secret code for everyone: members and sub-admins are asked for it and refused without it', async () => {
+  const id = await agent()('POST', '/auth/identify', { mobile: '9811111111' }, { expect: 200 });
+  assert.equal(id.data.needsCode, true, 'members are asked for the code');
+  const m = agent();
+  const noCode = await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15' }, { expect: 401 });
+  assert.equal(noCode.data.error.code, 'member_login_wrong');
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '9999' }, { expect: 401 });
+  await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
 });

@@ -75,12 +75,13 @@ router.post('/identify', async (req, res) => {
     const accounts = await prisma.member.findMany({ where: { mobileNumber: body.mobile, status: 'active' }, select: { id: true, fullName: true, memberNo: true }, orderBy: { memberNo: 'asc' } });
     const main = accounts[0];
     return res.json({
-      kind: 'member', methods: ['dob'], needsCode: false, found: Boolean(main),
+      // everyone (members too) gives the samiti's secret code after the date of birth
+      kind: 'member', methods: ['dob'], needsCode: true, found: Boolean(main),
       name: main?.fullName ?? null, memberNo: main?.memberNo ?? null,
       accounts: accounts.map((a) => ({ id: a.id, name: a.fullName, memberNo: a.memberNo })),
     });
   }
-  if (staff.role === 'subadmin') return res.json({ kind: 'subadmin', methods: ['dob'], needsCode: false, found: true, name: staff.name });
+  if (staff.role === 'subadmin') return res.json({ kind: 'subadmin', methods: ['dob'], needsCode: true, found: true, name: staff.name });
   const methods = ['dob', ...(staff.email && firebaseProjectId() ? ['google'] : [])];
   res.json({ kind: staff.role, methods, needsCode: true, found: true, name: staff.name });
 });
@@ -115,7 +116,7 @@ router.post('/login', async (req, res) => {
     } else {
       ok = sameDay(staff.dateOfBirth, body.dateOfBirth);
     }
-    if (ok && staff.role !== 'subadmin') ok = secretCodeOk(body.code);
+    if (ok) ok = secretCodeOk(body.code); // admins, developer and sub-admins all give the secret code
     if (!ok) {
       const left = await recordFail(db.adminUser, staff);
       throw new HttpError(401, staff.role === 'subadmin' ? 'member_login_wrong' : 'admin_login_wrong', { left });
@@ -143,7 +144,8 @@ router.post('/login', async (req, res) => {
     throw new HttpError(401, 'member_login_wrong');
   }
   await lockCheck(member);
-  if (!sameDay(member.dateOfBirth, body.dateOfBirth)) {
+  // date of birth AND the samiti's secret code; one wrong-try count for either
+  if (!sameDay(member.dateOfBirth, body.dateOfBirth) || !secretCodeOk(body.code)) {
     const left = await recordFail(prisma.member, member);
     throw new HttpError(401, 'member_login_wrong', { left });
   }
