@@ -116,7 +116,7 @@ export function Stat({ label, value, sub, tone, icon, href }) {
         {sub && <div className="mt-1.5 text-xs text-muted">{sub}</div>}
       </div>
       {icon && (
-        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${TONE_BUBBLE[tone] ?? 'bg-paper text-maroon'}`}>
+        <span className={`hidden size-10 shrink-0 place-items-center rounded-xl sm:grid ${TONE_BUBBLE[tone] ?? 'bg-paper text-maroon'}`}>
           <Icon name={icon} className="size-5" />
         </span>
       )}
