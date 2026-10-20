@@ -143,6 +143,47 @@ export function monthStatement(member, month, year) {
   };
 }
 
+/**
+ * Every loan of a member, newest first, told plainly: given when and how much, made from a top-up
+ * (balance carried from loan X + new money), what was paid in cash, what is left, and how it closed
+ * (fully repaid, or its balance moved into a top-up loan).
+ */
+export function loanStories(member) {
+  const now = currentMonthYear();
+  const k = ym(now.year, now.month);
+  const byId = Object.fromEntries(member.loans.map((l) => [l.id, l]));
+  return member.loans.map((l) => {
+    const pos = loanPosition(l, l.repayments, Math.max(k, ymOfDate(l.takenOn)));
+    const cash = l.repayments.filter((r) => !r.movedToLoanId);
+    const moved = l.repayments.find((r) => r.movedToLoanId);
+    const last = [...l.repayments].sort((a, b) => (iso(a.paidOn) < iso(b.paidOn) ? 1 : -1))[0];
+    const ins = loanInsights(l, l.repayments, k);
+    return {
+      loanNo: l.loanNo,
+      takenOn: iso(l.takenOn),
+      principalPaise: l.principalPaise,
+      newMoneyPaise: l.principalPaise - (l.carriedPrincipalPaise ?? 0),
+      carriedPrincipalPaise: l.carriedPrincipalPaise ?? 0,
+      topupFromLoanNo: l.topupOfLoanId ? byId[l.topupOfLoanId]?.loanNo ?? null : null,
+      interestMethod: l.interestMethod, rateBp: l.rateBp, ratePeriod: l.ratePeriod, fixedInterestPaise: l.fixedInterestPaise, termMonths: l.termMonths ?? null,
+      installmentPaise: l.installmentPaise,
+      interestFrom: { month: l.interestFromMonth, year: l.interestFromYear },
+      principalPaidPaise: cash.reduce((t, r) => t + r.principalPaise, 0),
+      interestPaidPaise: cash.reduce((t, r) => t + r.interestPaise, 0),
+      paymentsCount: cash.length,
+      principalOutstandingPaise: pos?.principalOutstandingPaise ?? 0,
+      interestOutstandingPaise: Math.max(0, pos?.interestOutstandingPaise ?? 0),
+      totalOutstandingPaise: Math.max(0, pos?.totalOutstandingPaise ?? 0),
+      closed: Boolean(pos?.closed),
+      closedHow: !pos?.closed ? null : moved ? 'topup' : 'repaid',
+      closedOn: !pos?.closed ? null : iso((moved ?? last)?.paidOn) ?? null,
+      movedToLoanNo: moved ? byId[moved.movedToLoanId]?.loanNo ?? null : null,
+      movedPaise: moved ? moved.principalPaise + moved.interestPaise : 0,
+      payoff: ins?.plan?.payoff ?? null,
+    };
+  }).sort((a, b) => b.loanNo - a.loanNo);
+}
+
 /** Member home screen — the seven essentials (spec §3A). */
 export function memberHome(member) {
   const { month, year } = currentMonthYear();
@@ -166,6 +207,7 @@ export function memberHome(member) {
     // only loans still being repaid (closed and topped-up loans left out), for progress and "still to repay"
     runningLoans: sumLoans(st.loans.filter((p) => !p.closed)),
     runningLoanCount: st.loans.filter((p) => !p.closed).length,
+    loanList: loanStories(member),
   };
 }
 

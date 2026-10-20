@@ -180,7 +180,19 @@ export async function applyPayment(tx, req, payment, paidOn) {
     await tx.member.update({ where: { id: member.id }, data: { creditPaise: available } });
   }
   if (available > creditBefore) lines.push({ kind: 'advance', amountPaise: available - creditBefore });
-  return { lines, creditBeforePaise: creditBefore, creditAfterPaise: available, usedCreditPaise: Math.max(0, creditBefore - available) };
+  // what is still owed right after this payment — printed on the receipt as it was that day
+  const fresh = await loadMemberForPay(tx, member.id);
+  const left = duesOf(fresh);
+  const nowK = ym(currentMonthYear().year, currentMonthYear().month);
+  const after = {
+    installmentPendingPaise: left.installmentPaise,
+    installmentMonths: left.installments.map((i) => ({ month: i.month, year: i.year, pendingPaise: i.pendingPaise })),
+    loans: fresh.loans.map((l) => {
+      const pos = loanPosition(l, l.repayments, Math.max(nowK, ym(new Date(l.takenOn).getUTCFullYear(), new Date(l.takenOn).getUTCMonth() + 1)));
+      return pos && { loanNo: l.loanNo, principalPaise: l.principalPaise, principalOutstandingPaise: pos.principalOutstandingPaise, interestOutstandingPaise: Math.max(0, pos.interestOutstandingPaise), closed: pos.closed };
+    }).filter((x) => x && (!x.closed || lines.some((ln) => ln.kind === 'loan' && ln.loanNo === x.loanNo))),
+  };
+  return { lines, creditBeforePaise: creditBefore, creditAfterPaise: available, usedCreditPaise: Math.max(0, creditBefore - available), after };
 }
 
 /** Date the member actually paid (UPI submission time or creation time), in India. */

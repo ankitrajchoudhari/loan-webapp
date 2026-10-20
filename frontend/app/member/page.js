@@ -131,6 +131,14 @@ export default function MemberHome() {
               {payoff && <div className="mt-1 text-xs font-semibold text-brand-dark">{t('home.endsIn', { month: t(`m${payoff.month}`), year: payoff.year })}</div>}
             </div>
           </div>
+          {(data.loanList ?? []).filter((x) => !x.closed && x.topupFromLoanNo).map((x) => (
+            <div key={x.loanNo} className="mx-4 mb-3 rounded-xl bg-brand-50/70 px-3 py-2 text-xs text-brand-dark">
+              {t('home.topupLine', { n: x.loanNo, carried: money(x.carriedPrincipalPaise), from: x.topupFromLoanNo, extra: money(x.newMoneyPaise), total: money(x.principalPaise) })}
+            </div>
+          ))}
+          <Link href="/member/loans" className="mx-4 mb-3 flex items-center justify-between rounded-xl bg-paper/70 px-3 py-2 text-sm font-semibold text-maroon">
+            {t('home.allLoans', { n: (data.loanList ?? []).length })}<Icon name="chevronRight" className="size-4" />
+          </Link>
           {data.loanStatus?.overduePaise > 0 && (
             <div className="mx-4 mb-3 rounded-xl bg-bad-bg px-3 py-2 text-xs font-semibold text-bad">{t('member.loanOverdue', { amount: money(data.loanStatus.overduePaise), n: data.loanStatus.monthsBehind })}</div>
           )}

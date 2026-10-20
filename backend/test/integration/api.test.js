@@ -919,3 +919,30 @@ test('secret code for everyone: members and sub-admins are asked for it and refu
   await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '9999' }, { expect: 401 });
   await m('POST', '/auth/login', { mobile: '9811111111', dateOfBirth: '1970-03-15', code: '0100' }, { expect: 200 });
 });
+
+test('member loan history shows the top-up story; a receipt keeps the balances right after the payment', async () => {
+  const c = await admin('POST', '/members', { fullName: 'कहानी जाँच', mobileNumber: '9870000002', joinDate: dateIn(6, 1), dateOfBirth: '1977-07-07', monthlyInstallmentPaise: '1000' }, { expect: 201 });
+  const mid = c.data.member.id;
+  const l1 = await admin('POST', '/loans', { memberId: mid, takenOn: dateIn(5, 10), principalPaise: '10000', interestMethod: 'flat', rateBp: '1', ratePeriod: 'month', installmentPaise: '1100' }, { expect: 201 });
+  for (let i = 4; i >= 3; i--) await admin('POST', `/loans/${l1.data.loan.id}/repayments`, { paidOn: dateIn(i, 10), totalPaise: '1100', principalPaise: '1000', interestPaise: '100', method: 'cash' }, { expect: 201 });
+  const t = await admin('POST', `/loans/${l1.data.loan.id}/topup`, { takenOn: dateIn(3, 15), extraPaise: '5000', interestMethod: 'flat', rateBp: '1', ratePeriod: 'month', installmentPaise: '1300' }, { expect: 201 });
+
+  const home = (await admin('GET', `/statements/${mid}/home`, undefined, { expect: 200 })).data;
+  const [newer, older] = home.loanList;
+  assert.equal(newer.loanNo, t.data.loan.loanNo);
+  assert.equal(newer.carriedPrincipalPaise, 800000, '₹8,000 carried');
+  assert.equal(newer.newMoneyPaise, 500000, '₹5,000 new');
+  assert.equal(newer.topupFromLoanNo, l1.data.loan.loanNo);
+  assert.equal(older.closed, true);
+  assert.equal(older.closedHow, 'topup');
+  assert.equal(older.movedToLoanNo, newer.loanNo);
+  assert.equal(older.principalPaidPaise, 200000, 'only the 2 cash payments, not the moved ₹8,000');
+  assert.equal(older.closedOn, dateIn(3, 15));
+
+  // a cash payment's receipt carries what is left afterwards
+  const pay = await admin('POST', '/payments/cash', { memberId: mid, amountPaise: '1000' }, { expect: 201 });
+  const after = pay.data.payment.allocation.after;
+  assert.ok(after, 'balances saved with the payment');
+  assert.equal(typeof after.installmentPendingPaise, 'number');
+  assert.ok(after.loans.some((x) => x.loanNo === newer.loanNo && x.principalOutstandingPaise === 1300000), 'running loan balance shown');
+});

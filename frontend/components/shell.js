@@ -155,7 +155,7 @@ function BottomTabs({ items, className = '' }) {
 const MEMBER_TABS = [
   { href: '/member', icon: 'home', label: 'nav.home', exact: true },
   { href: '/member/pay', icon: 'wallet', label: 'nav.pay' },
-  { href: '/member/loan', icon: 'handCoins', label: 'nav.loan' },
+  { href: '/member/loans', icon: 'handCoins', label: 'nav.loan' },
   { href: '/member/month', icon: 'file', label: 'nav.statement' },
   { href: '/member/history', icon: 'history', label: 'nav.records' },
 ];
